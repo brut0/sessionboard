@@ -222,7 +222,9 @@ def test_ac_2_5_conflict_detection_specialist_room_client(client, base_entities)
     assert res_spec.status_code == 409
     body_spec = res_spec.json()
     assert body_spec["detail"] == "conflict"
-    assert body_spec["conflicts"] == [{"type": "specialist", "conflicting_session_id": session_id1}]
+    assert body_spec["conflicts"] == [
+        {"type": "specialist", "session_id": session_id1, "conflicting_session_id": session_id1}
+    ]
 
 
 @pytest.mark.integration
