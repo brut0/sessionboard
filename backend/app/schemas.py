@@ -10,6 +10,16 @@ class ErrorDetail(BaseModel):
     detail: str
 
 
+class HealthResponse(BaseModel):
+    status: Literal["ok", "degraded"]
+    db: Literal["ok", "error"]
+
+
+class VersionResponse(BaseModel):
+    version: str
+    env: Literal["local", "dev", "prod", "test"]
+
+
 class ConflictItem(BaseModel):
     type: Literal["specialist", "room", "client"]
     conflicting_session_id: int

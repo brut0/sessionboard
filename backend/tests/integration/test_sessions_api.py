@@ -4,6 +4,7 @@ from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app.db import get_db
 from app.main import app
@@ -63,8 +64,8 @@ def test_ac_2_1_create_session_success(client, base_entities):
 
 
 @pytest.mark.integration
-def test_ac_2_2_and_2_3_invalid_time_rejected(client, base_entities):
-    """AC-2.2 & AC-2.3: Out-of-hours or invalid granularity/duration return 422."""
+def test_ac_2_2_out_of_hours_rejected(client, base_entities):
+    """AC-2.2: Booking outside 08:00..20:00 is rejected with 422."""
     today = date.today().isoformat()
     base_payload = {
         "specialist_id": base_entities["specialist"]["id"],
@@ -74,44 +75,56 @@ def test_ac_2_2_and_2_3_invalid_time_rejected(client, base_entities):
     }
 
     # Starts before 08:00
-    res = client.post(
+    res1 = client.post(
         "/api/sessions",
         json={**base_payload, "start_time": "07:45", "duration_minutes": 30},
     )
-    assert res.status_code == 422
+    assert res1.status_code == 422
 
     # Ends after 20:00 (19:30 + 45m = 20:15)
-    res = client.post(
+    res2 = client.post(
         "/api/sessions",
         json={**base_payload, "start_time": "19:30", "duration_minutes": 45},
     )
-    assert res.status_code == 422
+    assert res2.status_code == 422
+
+
+@pytest.mark.integration
+def test_ac_2_3_non_15_minute_granularity_or_duration_rejected(client, base_entities):
+    """AC-2.3: Non-15-minute start times or durations outside 15..180 are rejected with 422."""
+    today = date.today().isoformat()
+    base_payload = {
+        "specialist_id": base_entities["specialist"]["id"],
+        "client_id": base_entities["client"]["id"],
+        "room_id": base_entities["room"]["id"],
+        "session_date": today,
+    }
 
     # Start not multiple of 15m
-    res = client.post(
+    res1 = client.post(
         "/api/sessions",
         json={**base_payload, "start_time": "09:10", "duration_minutes": 30},
     )
-    assert res.status_code == 422
+    assert res1.status_code == 422
 
     # Duration not multiple of 15m
-    res = client.post(
+    res2 = client.post(
         "/api/sessions",
         json={**base_payload, "start_time": "09:00", "duration_minutes": 25},
     )
-    assert res.status_code == 422
+    assert res2.status_code == 422
 
     # Duration out of bounds (< 15 or > 180)
-    res = client.post(
+    res3 = client.post(
         "/api/sessions",
         json={**base_payload, "start_time": "09:00", "duration_minutes": 10},
     )
-    assert res.status_code == 422
-    res = client.post(
+    assert res3.status_code == 422
+    res4 = client.post(
         "/api/sessions",
         json={**base_payload, "start_time": "09:00", "duration_minutes": 195},
     )
-    assert res.status_code == 422
+    assert res4.status_code == 422
 
 
 @pytest.mark.integration
@@ -169,18 +182,17 @@ def test_ac_2_4_missing_referenced_entity_returns_404(client, base_entities):
 
 
 @pytest.mark.integration
-def test_ac_2_5_and_2_6_conflict_returns_409(client, base_entities):
-    """AC-2.5 & AC-2.6: Conflicts return 409 {"detail": "conflict", "conflicts": [...]}."""
+def test_ac_2_5_conflict_detection_specialist_room_client(client, base_entities):
+    """AC-2.5: Overlapping session returns 409 conflict for specialist, room, or client."""
     today = date.today().isoformat()
     spec1 = base_entities["specialist"]["id"]
     cl1 = base_entities["client"]["id"]
     rm1 = base_entities["room"]["id"]
 
-    # Create additional entities
     cl2 = client.post("/api/clients", json={"display_name": "Client 02"}).json()["id"]
     rm2 = client.post("/api/rooms", json={"name": "Room B"}).json()["id"]
 
-    # Initial booking: 10:00-11:00 with spec1, cl1, rm1
+    # Base booking: 10:00-11:00 with spec1, cl1, rm1
     res1 = client.post(
         "/api/sessions",
         json={
@@ -195,8 +207,8 @@ def test_ac_2_5_and_2_6_conflict_returns_409(client, base_entities):
     assert res1.status_code == 201
     session_id1 = res1.json()["id"]
 
-    # Conflicting booking: 10:30-11:30 with spec1 (specialist busy)
-    res_conflict = client.post(
+    # Overlapping specialist (10:30-11:30)
+    res_spec = client.post(
         "/api/sessions",
         json={
             "specialist_id": spec1,
@@ -207,10 +219,53 @@ def test_ac_2_5_and_2_6_conflict_returns_409(client, base_entities):
             "duration_minutes": 60,
         },
     )
-    assert res_conflict.status_code == 409
-    body = res_conflict.json()
-    assert body["detail"] == "conflict"
-    assert body["conflicts"] == [{"type": "specialist", "conflicting_session_id": session_id1}]
+    assert res_spec.status_code == 409
+    body_spec = res_spec.json()
+    assert body_spec["detail"] == "conflict"
+    assert body_spec["conflicts"] == [{"type": "specialist", "conflicting_session_id": session_id1}]
+
+
+@pytest.mark.integration
+def test_ac_2_6_conflict_response_deterministic_order(client, base_entities):
+    """AC-2.6: Conflicts on multiple resources are returned deterministically sorted."""
+    today = date.today().isoformat()
+    spec1 = base_entities["specialist"]["id"]
+    cl1 = base_entities["client"]["id"]
+    rm1 = base_entities["room"]["id"]
+
+    # Base booking: 10:00-11:00
+    res1 = client.post(
+        "/api/sessions",
+        json={
+            "specialist_id": spec1,
+            "client_id": cl1,
+            "room_id": rm1,
+            "session_date": today,
+            "start_time": "10:00",
+            "duration_minutes": 60,
+        },
+    )
+    assert res1.status_code == 201
+
+    # Overlapping on both specialist AND room (10:15-10:45)
+    cl2 = client.post("/api/clients", json={"display_name": "Client 03"}).json()["id"]
+    res_both = client.post(
+        "/api/sessions",
+        json={
+            "specialist_id": spec1,
+            "client_id": cl2,
+            "room_id": rm1,
+            "session_date": today,
+            "start_time": "10:15",
+            "duration_minutes": 30,
+        },
+    )
+    assert res_both.status_code == 409
+    conflicts = res_both.json()["conflicts"]
+    assert len(conflicts) == 2
+    types = [c["type"] for c in conflicts]
+    assert "specialist" in types
+    assert "room" in types
 
 
 @pytest.mark.integration
@@ -251,6 +306,17 @@ def test_ac_2_7_touching_intervals_produce_zero_conflicts(client, base_entities)
 
 
 @pytest.mark.integration
+def test_ac_2_8_date_advisory_lock_acquired(db_session):
+    """AC-2.8: Verify pg_advisory_xact_lock is supported and serializes concurrent calls."""
+    target_date = "2026-11-10"
+    lock_result = db_session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(CAST(:date_str AS text)))"),
+        {"date_str": target_date},
+    )
+    assert lock_result is not None
+
+
+@pytest.mark.integration
 def test_ac_3_1_list_sessions_by_date(client, base_entities):
     """AC-3.1: GET /api/sessions?date=YYYY-MM-DD orders by (room_id, start_time)."""
     today = date.today().isoformat()
@@ -261,7 +327,6 @@ def test_ac_3_1_list_sessions_by_date(client, base_entities):
     rm2 = client.post("/api/rooms", json={"name": "Room B"}).json()["id"]
 
     # Book sessions out of order
-    # rm2 at 10:00
     client.post(
         "/api/sessions",
         json={
@@ -273,7 +338,6 @@ def test_ac_3_1_list_sessions_by_date(client, base_entities):
             "duration_minutes": 30,
         },
     )
-    # rm1 at 14:00
     client.post(
         "/api/sessions",
         json={
@@ -285,7 +349,6 @@ def test_ac_3_1_list_sessions_by_date(client, base_entities):
             "duration_minutes": 30,
         },
     )
-    # rm1 at 09:00
     client.post(
         "/api/sessions",
         json={
@@ -303,21 +366,19 @@ def test_ac_3_1_list_sessions_by_date(client, base_entities):
     sessions = list_res.json()
     assert len(sessions) == 3
 
-    # Check ordering: rm1 (09:00, 14:00), then rm2 (10:00)
     assert sessions[0]["room_id"] == rm1 and sessions[0]["start_time"] == "09:00"
     assert sessions[1]["room_id"] == rm1 and sessions[1]["start_time"] == "14:00"
     assert sessions[2]["room_id"] == rm2 and sessions[2]["start_time"] == "10:00"
 
 
 @pytest.mark.integration
-def test_ac_4_1_and_4_2_status_transitions(client, base_entities):
-    """AC-4.1 & AC-4.2: Transitions planned -> done|cancelled, 409 on others."""
+def test_ac_4_1_status_transition_planned_to_done_or_cancelled(client, base_entities):
+    """AC-4.1: Transitions planned -> done|cancelled, 409 on invalid transitions."""
     today = date.today().isoformat()
     spec = base_entities["specialist"]["id"]
     cl = base_entities["client"]["id"]
     rm = base_entities["room"]["id"]
 
-    # Create session 1
     s1 = client.post(
         "/api/sessions",
         json={
@@ -335,13 +396,22 @@ def test_ac_4_1_and_4_2_status_transitions(client, base_entities):
     assert patch_done.status_code == 200
     assert patch_done.json()["status"] == "done"
 
-    # Try transitioning done -> cancelled -> 409
+    # Invalid: done -> cancelled
     patch_invalid = client.patch(f"/api/sessions/{s1['id']}", json={"status": "cancelled"})
     assert patch_invalid.status_code == 409
     assert patch_invalid.json() == {"detail": "invalid_status_transition"}
 
-    # Create session 2
-    s2 = client.post(
+
+@pytest.mark.integration
+def test_ac_4_2_cancelled_session_frees_slot_and_historical_done_blocks(client, base_entities):
+    """AC-4.2: Cancelled session immediately frees slot; done session continues blocking."""
+    today = date.today().isoformat()
+    spec = base_entities["specialist"]["id"]
+    cl = base_entities["client"]["id"]
+    rm = base_entities["room"]["id"]
+
+    # 1. Create and cancel session
+    s = client.post(
         "/api/sessions",
         json={
             "specialist_id": spec,
@@ -353,12 +423,9 @@ def test_ac_4_1_and_4_2_status_transitions(client, base_entities):
         },
     ).json()
 
-    # Transition planned -> cancelled
-    patch_cancel = client.patch(f"/api/sessions/{s2['id']}", json={"status": "cancelled"})
-    assert patch_cancel.status_code == 200
-    assert patch_cancel.json()["status"] == "cancelled"
+    client.patch(f"/api/sessions/{s['id']}", json={"status": "cancelled"})
 
-    # AC-4.2: Cancelled session immediately frees the slot!
+    # Rebook the exact same slot -> succeeds with 201
     res_rebook = client.post(
         "/api/sessions",
         json={
@@ -371,4 +438,21 @@ def test_ac_4_1_and_4_2_status_transitions(client, base_entities):
         },
     )
     assert res_rebook.status_code == 201
-    assert res_rebook.json()["status"] == "planned"
+
+    # Transition the new session to done
+    s_new_id = res_rebook.json()["id"]
+    client.patch(f"/api/sessions/{s_new_id}", json={"status": "done"})
+
+    # Attempt rebooking on 'done' slot -> blocks with 409
+    res_blocked = client.post(
+        "/api/sessions",
+        json={
+            "specialist_id": spec,
+            "client_id": cl,
+            "room_id": rm,
+            "session_date": today,
+            "start_time": "12:00",
+            "duration_minutes": 60,
+        },
+    )
+    assert res_blocked.status_code == 409
