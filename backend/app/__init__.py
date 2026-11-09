@@ -1,0 +1,1 @@
+"""SessionBoard backend application package."""
