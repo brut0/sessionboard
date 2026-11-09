@@ -1,0 +1,35 @@
+# Local, never committed
+.local/
+.env
+.env.*
+!.env.example
+incident/
+.pr-body.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+coverage/
+
+# Built SPA copied into the backend image
+backend/app/static/
+
+# Data
+*.db
+*.sqlite
+*.xlsx
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

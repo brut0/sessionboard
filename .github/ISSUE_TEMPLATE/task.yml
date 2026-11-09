@@ -1,0 +1,58 @@
+name: Task
+description: A specification-backed task for an AI agent or human contributor
+title: "[T00] "
+labels: []
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Clear 1-3 sentence description of the deliverable.
+    validations:
+      required: true
+  - type: input
+    id: spec_ref
+    attributes:
+      label: Spec reference
+      description: Path and section in specs/ or docs/plan/MASTER_PLAN.md
+      placeholder: "specs/product-spec.md#us-2, specs/api/openapi.yaml"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: Checkbox list of verifiable acceptance criteria (include AC IDs where applicable).
+      value: |
+        - [ ] AC-
+    validations:
+      required: true
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Test plan
+      description: Exact unit, integration, or frontend tests that prove the acceptance criteria.
+    validations:
+      required: true
+  - type: dropdown
+    id: agent_role
+    attributes:
+      label: Agent role
+      options:
+        - spec
+        - architect
+        - backend
+        - frontend
+        - qa
+        - reviewer
+        - devops
+        - oncall
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: Anything this task explicitly must NOT touch or implement.
+    validations:
+      required: true
