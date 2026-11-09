@@ -14,7 +14,7 @@ SessionBoard enforces a multi-layered automated testing pyramid:
 | **Unit (Domain)** | `backend/tests/unit/` | `pytest` (pure in-memory Python 3.12) | Interval arithmetic (`time_utils.py`), overflow math, studio working hours (08:00–20:00), 15-minute granularity, and multi-resource conflict detection (`conflicts.py`). |
 | **Integration** | `backend/tests/integration/` | `pytest` + `testcontainers` (PostgreSQL 16) | Tests all 16 Acceptance Criteria against a real PostgreSQL 16 database running Alembic migrations. Verifies advisory lock serialization, constraints, cascading rules, and REST status codes. |
 | **Contract** | `backend/tests/integration/test_openapi_contract.py` | `pytest` + `PyYAML` | Verifies that FastAPI's generated `app.openapi()` matches `specs/api/openapi.yaml` in routes, HTTP methods, operation IDs, and declared response status codes. |
-| **Frontend** | `frontend/src/**/*.test.tsx` | `vitest` + `jsdom` + `@testing-library/react` | Component rendering, tab switching (Day Board / Directory), date controls, and modal behavior. |
+| **Frontend** | `frontend/src/**/*.test.tsx` | `vitest` + `jsdom` + `@testing-library/react` + `msw` | Component rendering, tab switching (Day Board / Directory), room column grouping, 15-min booking modal, 409 conflict banners, 500 Trace ID display, and status transitions. |
 
 ---
 
@@ -24,7 +24,13 @@ SessionBoard enforces a multi-layered automated testing pyramid:
 ```bash
 make test
 ```
-Runs both backend and frontend test suites.
+Runs both backend and frontend test suites (`test-backend` then `test-frontend`). On Windows environments where `make` is not natively installed, run the underlying commands:
+```powershell
+# Backend
+cd backend && uv run pytest -v
+# Frontend
+cd frontend && npm test
+```
 
 ### Backend Only (Unit + Integration + Contract)
 ```bash
@@ -52,7 +58,24 @@ cd frontend && npm test
 
 ---
 
-## 3. Acceptance Criteria Traceability Matrix (AC-1.1 – AC-4.2)
+## 3. Frontend Component Test Architecture (Vitest + RTL + MSW)
+
+The frontend test suite executes under Vitest in a `jsdom` environment. Network interactions with the backend API are isolated using **Mock Service Worker (MSW 2)**:
+- `src/test/mocks/handlers.ts`: Defines MSW request handlers matching endpoints (`/api/rooms`, `/api/specialists`, `/api/clients`, `/api/sessions`, etc.).
+- `src/test/mocks/server.ts`: Configures the MSW `setupServer` instance.
+- `src/test/setup.ts`: Registers lifecycle listeners (`server.listen()`, `server.resetHandlers()`, `server.close()`).
+
+### Frontend AC Coverage Matrix
+| Component Test File | Target Component | Verifies Criteria |
+|---|---|---|
+| `src/App.test.tsx` | `App` | Tab navigation between Day Board and Directory |
+| `src/components/DayBoard.test.tsx` | `DayBoard` | **AC-3.1** (grouping sessions by room), **AC-4.1** (Done/Cancel status transitions), **AC-4.2** (cancelled session styling), Date navigation |
+| `src/components/BookingModal.test.tsx` | `BookingModal` | **AC-2.1** (successful booking submission), **AC-2.5** / **AC-2.6** (409 conflict list rendering), 5xx Trace ID error banner |
+| `src/components/DirectoryPage.test.tsx` | `DirectoryPage` | **AC-1.1** (listing and creating specialists/clients/rooms), **AC-1.3** (duplicate room name 409), **AC-1.4** (204 deletion), **AC-1.5** (referenced entity delete 409) |
+
+---
+
+## 4. Acceptance Criteria Traceability Matrix (AC-1.1 – AC-4.2)
 
 Every Acceptance Criterion defined in `specs/product-spec.md` is covered by automated integration tests running against PostgreSQL 16:
 
@@ -77,7 +100,7 @@ Every Acceptance Criterion defined in `specs/product-spec.md` is covered by auto
 
 ---
 
-## 4. Zero-PII Policy in Tests
+## 5. Zero-PII Policy in Tests
 
 In accordance with Hard Rule 5:
 - Test fixtures only use synthetic anonymized identifiers (e.g., `Alex Morgan`, `Sam Lee`, `Room A`, `Client 01`).
