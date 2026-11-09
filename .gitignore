@@ -19,6 +19,7 @@ __pycache__/
 node_modules/
 frontend/dist/
 coverage/
+*.tsbuildinfo
 
 # Built SPA copied into the backend image
 backend/app/static/

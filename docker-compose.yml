@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sessionboard
+      POSTGRES_PASSWORD: sessionboard
+      POSTGRES_DB: sessionboard
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sessionboard -d sessionboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sessionboard-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://sessionboard:sessionboard@db:5432/sessionboard
+      APP_ENV: local
+      SEED_DEMO_DATA: "true"
+      OTEL_SERVICE_NAME: sessionboard
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sessionboard-net
+
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - sessionboard-net
+
+volumes:
+  pgdata:
+
+networks:
+  sessionboard-net:
+    driver: bridge
