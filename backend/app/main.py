@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.db import check_db_health
-from app.routers import directory
+from app.routers import directory, sessions
 from app.telemetry import TraceIdMiddleware, get_current_trace_id, setup_telemetry
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ app.add_middleware(
 )
 
 app.include_router(directory.router)
+app.include_router(sessions.router)
 
 
 @app.exception_handler(Exception)

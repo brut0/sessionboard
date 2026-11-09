@@ -1,6 +1,6 @@
 """Pydantic schemas for request validation and serialization."""
 
-from datetime import date, datetime, time
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -10,14 +10,14 @@ class ErrorDetail(BaseModel):
     detail: str
 
 
-class ConflictDetail(BaseModel):
+class ConflictItem(BaseModel):
     type: Literal["specialist", "room", "client"]
     conflicting_session_id: int
 
 
-class ConflictErrorResponse(BaseModel):
+class ConflictError(BaseModel):
     detail: str = "conflict"
-    conflicts: list[ConflictDetail]
+    conflicts: list[ConflictItem]
 
 
 # --- Specialist Schemas ---
@@ -104,11 +104,15 @@ class SessionRead(BaseModel):
 
     id: int
     specialist_id: int
+    specialist_name: str
     client_id: int
+    client_display_name: str
     room_id: int
+    room_name: str
     session_date: date
-    start_time: time
+    start_time: str
+    end_time: str
     duration_minutes: int
     status: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
