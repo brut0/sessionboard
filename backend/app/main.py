@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.db import check_db_health
 from app.routers import directory, sessions
+from app.schemas import HealthResponse, VersionResponse
 from app.telemetry import TraceIdMiddleware, get_current_trace_id, setup_telemetry
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,16 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     )
 
 
-@app.get("/api/health", tags=["system"])
+@app.get(
+    "/api/health",
+    tags=["system"],
+    response_model=HealthResponse,
+    responses={
+        200: {"model": HealthResponse, "description": "Application and database are healthy"},
+        503: {"model": HealthResponse, "description": "Database is unreachable"},
+    },
+    operation_id="get_health",
+)
 def get_health() -> Response:
     """System health check endpoint verifying database connectivity."""
     db_ok = check_db_health()
@@ -79,7 +89,12 @@ def get_health() -> Response:
     )
 
 
-@app.get("/api/version", tags=["system"])
+@app.get(
+    "/api/version",
+    tags=["system"],
+    response_model=VersionResponse,
+    operation_id="get_version",
+)
 def get_version() -> dict[str, str]:
     """Return application version and running environment."""
     return {
