@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SessionBoard — Interactive Architecture & Pipeline Explorer</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --surface: #0b1120;
+      --border: #334155;
+      --fg: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+    }
+    html.light {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --surface: #f1f5f9;
+      --border: #cbd5e1;
+      --fg: #0f172a;
+      --muted: #475569;
+      --accent: #0284c7;
+    }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    @keyframes dashFlow {
+      to {
+        stroke-dashoffset: -28;
+      }
+    }
+    .edge-live {
+      stroke-dasharray: 7 7;
+      animation: dashFlow 0.9s linear infinite;
+    }
+    .edge-static {
+      stroke-dasharray: none;
+      animation: none;
+    }
+    .node-box {
+      transition: transform 0.15s ease, opacity 0.2s ease, filter 0.2s ease;
+      cursor: pointer;
+    }
+    .node-box:hover {
+      filter: brightness(1.1);
+    }
+    .dimmed {
+      opacity: 0.22 !important;
+    }
+    .highlighted-edge {
+      stroke-width: 3px !important;
+      opacity: 1 !important;
+    }
+    .surface-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .surface-Well {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body class="antialiased p-4 md:p-6">
+  <div class="max-w-7xl mx-auto space-y-5">
+
+    <!-- Header & Conclusion First -->
+    <div class="surface-card p-5 shadow-sm">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold" style="background:#0284c7;color:#fff;">
+              Archify Interactive Explainer
+            </span>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" style="border:1px solid var(--border);color:var(--muted);">
+              AI Dev Tools Zoomcamp · 12/12 Criteria (24 pts)
+            </span>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium" style="border:1px solid var(--border);color:var(--muted);">
+              100% Free-Tier Cloud ($0)
+            </span>
+          </div>
+          <h1 class="text-xl md:text-2xl font-bold mt-2">
+            SessionBoard — System Architecture, SDD Harness &amp; On-Call Pipeline
+          </h1>
+          <p class="text-sm mt-1 max-w-4xl" style="color:var(--muted);">
+            <strong style="color:var(--fg);">Conclusion first:</strong> A single multi-stage container (FastAPI + static React 19 SPA) backed by PostgreSQL 16 with date-scoped advisory locks prevents double bookings across specialists, rooms, and clients, exports zero-PII OpenTelemetry signals to Grafana, and self-heals via a headless Gemini CLI on-call workflow.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="toggleMotionBtn" onclick="toggleMotion()" class="px-3 py-1.5 rounded-lg text-xs font-semibold" style="background:#0284c7;color:#fff;">
+            ● Live Flow: ON
+          </button>
+          <button onclick="toggleTheme()" class="px-3 py-1.5 rounded-lg text-xs font-medium surface-Well">
+            ◐ Theme
+          </button>
+          <button onclick="clearSelection()" class="px-3 py-1.5 rounded-lg text-xs font-medium surface-Well">
+            Reset Focus
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2 mt-4 pt-4" style="border-top:1px solid var(--border);" id="viewTabs">
+        <button onclick="switchView('architecture')" data-view="architecture" class="view-tab px-3.5 py-1.5 rounded-lg text-xs font-semibold" style="background:#0284c7;color:#fff;">
+          1. System Architecture
+        </button>
+        <button onclick="switchView('sequence')" data-view="sequence" class="view-tab px-3.5 py-1.5 rounded-lg text-xs font-medium surface-Well">
+          2. Booking &amp; Advisory Lock
+        </button>
+        <button onclick="switchView('erd')" data-view="erd" class="view-tab px-3.5 py-1.5 rounded-lg text-xs font-medium surface-Well">
+          3. Data Model (ERD)
+        </button>
+        <button onclick="switchView('cicd')" data-view="cicd" class="view-tab px-3.5 py-1.5 rounded-lg text-xs font-medium surface-Well">
+          4. CI/CD &amp; On-Call Loop
+        </button>
+        <button onclick="switchView('agents')" data-view="agents" class="view-tab px-3.5 py-1.5 rounded-lg text-xs font-medium surface-Well">
+          5. Agent Team &amp; SDD Harness
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Interactive Workspace -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+      <div class="lg:col-span-8 surface-card p-4 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h2 id="canvasTitle" class="text-base font-semibold">1. Runtime &amp; Cloud Topology</h2>
+            <p id="canvasSubtitle" class="text-xs" style="color:var(--muted);">
+              Click any component node to trace upstream callers, downstream dependencies, and source files.
+            </p>
+          </div>
+          <span id="viewBadge" class="px-2.5 py-1 rounded text-xs font-medium surface-Well" style="color:var(--muted);">
+            Mode: architecture
+          </span>
+        </div>
+
+        <div class="w-full overflow-x-auto surface-Well p-2">
+          <svg id="archSvg" viewBox="0 0 860 500" class="w-full h-auto select-none" style="min-width: 680px;"></svg>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 mt-3 pt-2 text-xs" style="color:var(--muted);">
+          <div class="flex flex-wrap items-center gap-4">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm inline-block" style="background:#3b82f6"></span> Client / UI</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm inline-block" style="background:#10b981"></span> API &amp; Pure Domain</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm inline-block" style="background:#f59e0b"></span> PostgreSQL 16 (Neon)</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm inline-block" style="background:#8b5cf6"></span> OpenTelemetry &amp; Grafana</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm inline-block" style="background:#ef4444"></span> CI/CD &amp; On-Call Agent</span>
+          </div>
+          <span>Click a node to isolate its upstream/downstream path</span>
+        </div>
+      </div>
+
+      <div class="lg:col-span-4 surface-card p-5 shadow-sm space-y-4">
+        <div class="flex items-center justify-between pb-3" style="border-bottom:1px solid var(--border);">
+          <div>
+            <span class="text-xs font-semibold uppercase tracking-wider" style="color:var(--muted);">Node Inspector</span>
+            <h3 id="inspTitle" class="text-base font-bold mt-0.5">Select any node on the canvas</h3>
+          </div>
+          <span id="inspKind" class="px-2 py-0.5 rounded text-xs font-semibold surface-Well">Overview</span>
+        </div>
+
+        <p id="inspDesc" class="text-sm leading-relaxed" style="color:var(--muted);">
+          Click any box in the diagram to inspect its exact responsibility, contract rules, source file path, upstream callers, and downstream dependencies.
+        </p>
+
+        <div class="space-y-1.5 pt-1">
+          <div class="text-xs font-semibold">Source / Artifact Path</div>
+          <div id="inspFile" class="font-mono text-xs px-3 py-2 surface-Well break-all">
+            docs/architecture.md · specs/api/openapi.yaml
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 pt-1">
+          <div class="p-3 surface-Well">
+            <div class="text-xs font-semibold mb-1" style="color:var(--muted);">← Upstream (Callers)</div>
+            <ul id="inspUpstream" class="text-xs space-y-1"><li>—</li></ul>
+          </div>
+          <div class="p-3 surface-Well">
+            <div class="text-xs font-semibold mb-1" style="color:var(--muted);">→ Downstream (Calls)</div>
+            <ul id="inspDownstream" class="text-xs space-y-1"><li>—</li></ul>
+          </div>
+        </div>
+
+        <div class="pt-1">
+          <div class="text-xs font-semibold mb-1.5">Key Invariants &amp; Guardrails</div>
+          <ul id="inspRules" class="text-xs space-y-1.5 list-disc pl-4" style="color:var(--muted);">
+            <li>Zero SQLAlchemy/FastAPI imports in <code>app/domain/</code></li>
+            <li>Time math in integer minutes since midnight (0..1440)</li>
+            <li>Date advisory lock serializes concurrent bookings</li>
+            <li>Zero PII in spans, metrics, or JSON logs</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Architecture Decision & Criteria Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="surface-card p-4 shadow-sm">
+        <div class="text-xs font-semibold" style="color:var(--muted);">ADR-0001 · Packaging</div>
+        <div class="text-sm font-bold mt-1">Single Multi-Stage Container</div>
+        <p class="text-xs mt-1" style="color:var(--muted);">
+          Node 22 builds the React 19 SPA into <code>backend/app/static</code>; Python 3.12 + FastAPI serves both <code>/api/*</code> and static assets on one port.
+        </p>
+      </div>
+      <div class="surface-card p-4 shadow-sm">
+        <div class="text-xs font-semibold" style="color:var(--muted);">ADR-0002 · Cloud &amp; Cost</div>
+        <div class="text-sm font-bold mt-1">Render + 2× Neon + Grafana</div>
+        <p class="text-xs mt-1" style="color:var(--muted);">
+          Separate Neon projects for <code>dev</code> and <code>prod</code> (100 CU-h each, no 30-day expiry). Hourly synthetic probe keeps Render inside 750 free hours/mo.
+        </p>
+      </div>
+      <div class="surface-card p-4 shadow-sm">
+        <div class="text-xs font-semibold" style="color:var(--muted);">ADR-0003 · Concurrency</div>
+        <div class="text-sm font-bold mt-1">Sync psycopg 3 + Advisory Lock</div>
+        <p class="text-xs mt-1" style="color:var(--muted);">
+          <code>pg_advisory_xact_lock(hashtext(date))</code> serializes same-day bookings without cross-date contention or Windows async loop issues.
+        </p>
+      </div>
+      <div class="surface-card p-4 shadow-sm">
+        <div class="text-xs font-semibold" style="color:var(--muted);">Criteria 10–12 · SRE Loop</div>
+        <div class="text-sm font-bold mt-1">Rollback First, Gemini Fix Second</div>
+        <p class="text-xs mt-1" style="color:var(--muted);">
+          On alert, <code>oncall.yml</code> deterministically rolls back <code>dev</code>, then runs headless Gemini CLI + <code>pytest</code> gate to open an auto-merging fix PR.
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const COLORS = {
+      ui:   { fill: '#1e3a8a', stroke: '#3b82f6', badge: '#60a5fa' },
+      api:  { fill: '#064e3b', stroke: '#10b981', badge: '#34d399' },
+      db:   { fill: '#78350f', stroke: '#f59e0b', badge: '#fbbf24' },
+      otel: { fill: '#4c1d95', stroke: '#8b5cf6', badge: '#a78bfa' },
+      ops:  { fill: '#7f1d1d', stroke: '#ef4444', badge: '#f87171' }
+    };
+
+    const VIEWS = {
+      architecture: {
+        title: '1. Runtime & Cloud Topology (Single-Container SPA + API + OTel + On-Call)',
+        subtitle: 'Click any component node to trace upstream callers, downstream dependencies, and source files.',
+        badge: 'Mode: architecture',
+        groups: [
+          { x: 185, y: 20, w: 460, h: 315, label: 'Docker Container: sessionboard (Render Free / Local Compose :8000)' },
+          { x: 670, y: 20, w: 175, h: 460, label: 'Managed Data & SRE Cloud' }
+        ],
+        nodes: [
+          { id: 'admin', label: 'Studio Admin', sub: 'Browser Session', x: 20, y: 120, w: 140, h: 72, cat: 'ui',
+            file: 'User Persona (specs/product-spec.md §1.3)',
+            desc: 'Single studio administrator managing directory entities (specialists, clients, rooms) and booking daily sessions without double bookings.',
+            rules: ['No authentication required (synthetic demo data)', 'Receives X-Trace-Id on every HTTP response'] },
+          { id: 'spa', label: 'React 19 SPA', sub: 'DayBoard & Directory', x: 205, y: 55, w: 195, h: 76, cat: 'ui',
+            file: 'frontend/src/{App,pages/DayBoard,components/BookingModal}.tsx',
+            desc: 'Static Vite bundle served by FastAPI. Uses openapi-fetch + generated schema.d.ts to render room columns, 15-min booking pickers, and 409 conflict lines.',
+            rules: ['Zero hand-written API types (npm run gen:api)', 'Displays conflict details on 409 & Trace ID on 5xx'] },
+          { id: 'api', label: 'FastAPI Routers', sub: '/api/sessions & directory', x: 205, y: 165, w: 195, h: 78, cat: 'api',
+            file: 'backend/app/api/{sessions,directory,system}.py',
+            desc: 'Validates inputs via Pydantic v2 (BR-1 08:00-20:00, BR-2 15-min step), orchestrates DB transactions, and emits X-Trace-Id header.',
+            rules: ['14 operations matching specs/api/openapi.yaml', 'Custom 422/500 handlers record booking.result metric'] },
+          { id: 'domain', label: 'Pure Domain', sub: 'conflicts & time_utils', x: 430, y: 55, w: 195, h: 76, cat: 'api',
+            file: 'backend/app/domain/{time_utils,conflicts}.py',
+            desc: 'Pure Python functions and frozen dataclasses computing interval overlaps [start, end) in integer minutes since midnight.',
+            rules: ['FORBIDDEN: importing sqlalchemy, fastapi, or pydantic', 'Touching intervals (10:00-11:00 & 11:00-11:30) never conflict'] },
+          { id: 'orm', label: 'SQLAlchemy 2 Sync', sub: 'psycopg 3 + Alembic', x: 430, y: 165, w: 195, h: 78, cat: 'api',
+            file: 'backend/app/{db,models,seed}.py · backend/alembic/',
+            desc: 'Synchronous SQLAlchemy 2.x engine with psycopg 3 driver. Acquires date-scoped pg_advisory_xact_lock before checking conflicts.',
+            rules: ['Schema managed strictly via Alembic 0001_initial', 'ON DELETE RESTRICT protects session history'] },
+          { id: 'otel', label: 'OpenTelemetry SDK', sub: 'Traces · Metrics · Logs', x: 315, y: 265, w: 200, h: 56, cat: 'otel',
+            file: 'backend/app/{telemetry,logging_config}.py',
+            desc: 'Emits span booking.create, counter sessionboard_bookings_total{result,env}, and structured JSON logs sharing trace_id.',
+            rules: ['Zero PII: never logs names, display_name, or bodies', 'Verified by test_telemetry_no_pii.py'] },
+          { id: 'pg', label: 'PostgreSQL 16', sub: 'Local Container / Neon', x: 685, y: 155, w: 145, h: 86, cat: 'db',
+            file: 'specs/data-model.md · docker-compose.yml',
+            desc: 'Persistent relational store for specialists, clients, rooms, and sessions. Two isolated Neon projects in cloud (dev & prod).',
+            rules: ['3 composite indexes on (session_date, resource_id)', 'CHECK constraints on duration_minutes & status'] },
+          { id: 'grafana', label: 'Grafana LGTM', sub: 'Tempo · Loki · Mimir', x: 685, y: 275, w: 145, h: 86, cat: 'otel',
+            file: 'ops/grafana/{dashboard,alert-rule}.json',
+            desc: 'Collects OTLP signals and evaluates Alert Rule BookingErrorRatioHigh (error ratio > 20% over 5m when B >= 3).',
+            rules: ['14-day retention on Grafana Cloud Free', 'Webhook dispatches grafana-alert to GitHub'] },
+          { id: 'oncall', label: 'On-Call Agent', sub: 'Rollback + Gemini CLI', x: 205, y: 385, w: 420, h: 78, cat: 'ops',
+            file: '.github/workflows/{oncall,rollback,cd-dev}.yml · .agents/roles/oncall.md',
+            desc: 'Triggered via GitHub repository_dispatch. 1) Opens [incident] issue, 2) triggers rollback.yml on dev, 3) runs headless Gemini CLI + pytest to open an auto-merging fix PR.',
+            rules: ['Deterministic rollback executes BEFORE LLM runs', 'PR created only if uv run pytest passes'] }
+        ],
+        edges: [
+          { from: 'admin', to: 'spa', label: 'HTTPS :8000' },
+          { from: 'spa', to: 'api', label: 'openapi-fetch /api/*' },
+          { from: 'api', to: 'domain', label: 'find_conflicts()' },
+          { from: 'api', to: 'orm', label: 'Session tx' },
+          { from: 'orm', to: 'pg', label: 'psycopg 3 + lock' },
+          { from: 'api', to: 'otel', label: 'span + metric + log' },
+          { from: 'otel', to: 'grafana', label: 'OTLP HTTP 4318' },
+          { from: 'grafana', to: 'oncall', label: 'webhook dispatch' },
+          { from: 'oncall', to: 'api', label: 'rollback & fix CD' }
+        ]
+      },
+
+      sequence: {
+        title: '2. Atomic Booking Lifecycle & Advisory Lock (POST /api/sessions)',
+        subtitle: 'Step-by-step execution path preventing race conditions and double bookings.',
+        badge: 'Mode: sequence / workflow',
+        groups: [
+          { x: 20, y: 25, w: 820, h: 445, label: 'POST /api/sessions — Deterministic Validation & Transaction Pipeline' }
+        ],
+        nodes: [
+          { id: 's1', label: '1. Pydantic Validation', sub: 'BR-1 (08-20h) & BR-2 (15m)', x: 45, y: 75, w: 220, h: 75, cat: 'ui',
+            file: 'backend/app/schemas.py (SessionCreate)',
+            desc: 'Trims strings, verifies start_time is on a 15-minute boundary (00,15,30,45), duration is 15..180m, and start+duration <= 20:00 (1200m).',
+            rules: ['Invalid payload -> 422 Unprocessable Entity', 'Increments bookings_total{result="invalid"}'] },
+          { id: 's2', label: '2. Date Advisory Lock', sub: 'pg_advisory_xact_lock', x: 320, y: 75, w: 220, h: 75, cat: 'db',
+            file: 'backend/app/api/sessions.py (BR-8)',
+            desc: 'Acquires SELECT pg_advisory_xact_lock(hashtext(CAST(:date_str AS text))). Serializes concurrent bookings on the same date.',
+            rules: ['Lock is transaction-scoped (auto-released on commit/rollback)', 'Other dates proceed in parallel without contention'] },
+          { id: 's3', label: '3. Verify Entities & Load', sub: 'Check FK & active slots', x: 595, y: 75, w: 220, h: 75, cat: 'api',
+            file: 'backend/app/api/sessions.py (AC-2.4)',
+            desc: 'Checks that specialist_id, client_id, and room_id exist (else 404). Loads non-cancelled sessions on session_date sharing any of the 3 IDs.',
+            rules: ['Missing entity -> 404 {"detail": "not_found"}', 'Cancelled sessions are excluded at query & domain level'] },
+          { id: 's4', label: '4. Pure Conflict Engine', sub: 'find_conflicts(new, existing)', x: 595, y: 220, w: 220, h: 80, cat: 'api',
+            file: 'backend/app/domain/conflicts.py (BR-3, BR-4)',
+            desc: 'Evaluates half-open interval intersection max(a.start, b.start) < min(a.end, b.end) for specialist, room, and client.',
+            rules: ['Sorted by session_id ASC, then (specialist, room, client)', 'Touching endpoints (end_a == start_b) -> 0 conflicts'] },
+          { id: 's5', label: '5a. 409 Conflict Response', sub: 'Rollback + conflict list', x: 320, y: 355, w: 220, h: 80, cat: 'ops',
+            file: 'specs/product-spec.md §4 (AC-2.5, AC-2.6)',
+            desc: 'Rolls back transaction, sets span booking.result="conflict", and returns 409 with exact conflicting session IDs and types.',
+            rules: ['409 is counted as valid business outcome, NOT 5xx error', 'BookingModal renders human-readable busy lines'] },
+          { id: 's6', label: '5b. 201 Created & Telemetry', sub: 'INSERT + OTel span/log', x: 45, y: 220, w: 220, h: 80, cat: 'otel',
+            file: 'backend/app/telemetry.py (AC-2.1)',
+            desc: 'Inserts session with status="planned", commits transaction, logs JSON booking.completed with trace_id, and returns 201 + X-Trace-Id.',
+            rules: ['Response includes computed end_time and entity names', 'Zero PII written to OTel attributes or JSON logs'] }
+        ],
+        edges: [
+          { from: 's1', to: 's2', label: 'valid input' },
+          { from: 's2', to: 's3', label: 'lock acquired' },
+          { from: 's3', to: 's4', label: 'candidate slots' },
+          { from: 's4', to: 's5', label: 'conflicts > 0 (409)' },
+          { from: 's4', to: 's6', label: '0 conflicts (201)' }
+        ]
+      },
+
+      erd: {
+        title: '3. Physical Database Schema (PostgreSQL 16 + Alembic 0001)',
+        subtitle: 'Four normalized tables with ON DELETE RESTRICT referential integrity and composite date indexes.',
+        badge: 'Mode: erd',
+        groups: [
+          { x: 25, y: 25, w: 260, h: 445, label: 'Studio Directory Domain (F1)' },
+          { x: 345, y: 25, w: 490, h: 445, label: 'Scheduling Domain (F2–F4)' }
+        ],
+        nodes: [
+          { id: 't_spec', label: 'specialists', sub: 'PK id · name · specialty', x: 50, y: 65, w: 210, h: 95, cat: 'db',
+            file: 'specs/data-model.md §2.1',
+            desc: 'Stores studio tutors/coaches/therapists. Columns: id (INT PK), name (VARCHAR 100 NOT NULL), specialty (VARCHAR 100 NOT NULL), created_at (TIMESTAMPTZ).',
+            rules: ['Sorted by name ASC on GET /api/specialists', 'Cannot be deleted if referenced by sessions (409)'] },
+          { id: 't_client', label: 'clients', sub: 'PK id · display_name', x: 50, y: 195, w: 210, h: 95, cat: 'db',
+            file: 'specs/data-model.md §2.2',
+            desc: 'Stores studio clients. Columns: id (INT PK), display_name (VARCHAR 100 NOT NULL), created_at (TIMESTAMPTZ).',
+            rules: ['Synthetic demo names only (Client 01..08)', 'Never exported to OTel spans or logs'] },
+          { id: 't_room', label: 'rooms', sub: 'PK id · UNIQUE name', x: 50, y: 325, w: 210, h: 95, cat: 'db',
+            file: 'specs/data-model.md §2.3',
+            desc: 'Stores physical studio rooms. Columns: id (INT PK), name (VARCHAR 50 NOT NULL UNIQUE uq_rooms_name), created_at (TIMESTAMPTZ).',
+            rules: ['Duplicate name returns 409 {"detail": "room_name_taken"}', 'Each room forms one column on the Day Board'] },
+          { id: 't_sess', label: 'sessions', sub: 'PK id · FKs · date · start · dur · status', x: 400, y: 135, w: 380, h: 210, cat: 'api',
+            file: 'specs/data-model.md §2.4',
+            desc: 'Core scheduling table. FKs: specialist_id, client_id, room_id (all ON DELETE RESTRICT). Fields: session_date (DATE), start_time (TIME), duration_minutes (15..180, %15=0), status (planned|done|cancelled).',
+            rules: ['Indexes: (session_date, room_id), (session_date, specialist_id), (session_date, client_id)', 'Status transitions: only planned -> done | cancelled'] }
+        ],
+        edges: [
+          { from: 't_spec', to: 't_sess', label: '1:N (ON DELETE RESTRICT)' },
+          { from: 't_client', to: 't_sess', label: '1:N (ON DELETE RESTRICT)' },
+          { from: 't_room', to: 't_sess', label: '1:N (ON DELETE RESTRICT)' }
+        ]
+      },
+
+      cicd: {
+        title: '4. CI/CD Promotion, Rollback & Closed-Loop On-Call Remediation',
+        subtitle: 'Covers Course Criteria 9 (CI/CD 3/3 pts), 11 (Alerting), and 12 (On-Call Responder Agent).',
+        badge: 'Mode: workflow',
+        groups: [
+          { x: 20, y: 20, w: 820, h: 205, label: 'Continuous Integration, Continuous Delivery & Manual Production Promotion' },
+          { x: 20, y: 250, w: 820, h: 225, label: 'Automated User-Impact Alerting & Self-Healing On-Call Loop' }
+        ],
+        nodes: [
+          { id: 'ci', label: 'ci.yml (PR Gate)', sub: 'hygiene · ruff · pytest · vitest', x: 45, y: 65, w: 180, h: 85, cat: 'api',
+            file: '.github/workflows/ci.yml (Issue #13)',
+            desc: 'Runs on every PR: 1) check_repo_hygiene.py, 2) backend ruff + pytest with testcontainers Postgres, 3) frontend OpenAPI drift + typecheck + Vitest, 4) docker build.',
+            rules: ['Required status checks on main branch', 'Blocks any Cyrillic or forbidden terms'] },
+          { id: 'cd_dev', label: 'cd-dev.yml', sub: 'GHCR push -> Render dev', x: 265, y: 65, w: 180, h: 85, cat: 'ui',
+            file: '.github/workflows/cd-dev.yml (Issue #14)',
+            desc: 'Builds & pushes ghcr.io/brut0/sessionboard:<sha>, triggers Render dev deploy hook with &imgURL=, polls /api/version, and runs synthetic_probe.py --mode once.',
+            rules: ['Skips hook gracefully before initial Render setup', 'Polls up to 10 min for Render Free cold start'] },
+          { id: 'cd_prod', label: 'deploy-prod.yml', sub: 'Manual + Owner Approval', x: 485, y: 65, w: 170, h: 85, cat: 'db',
+            file: '.github/workflows/deploy-prod.yml (Issue #14)',
+            desc: 'Manual workflow_dispatch taking a dev-verified commit SHA. Pauses for GitHub Environment "production" approval before calling Render prod deploy hook.',
+            rules: ['Verifies image exists in GHCR via docker manifest inspect', 'Read-only smoke check on prod'] },
+          { id: 'rollback', label: 'rollback.yml', sub: 'Instant SHA Revert', x: 690, y: 65, w: 130, h: 85, cat: 'ops',
+            file: '.github/workflows/rollback.yml (Skill: release-and-rollback)',
+            desc: 'Redeploys any previous healthy commit SHA to dev or prod via Render deploy hook. Backward-compatible Alembic policy ensures zero down-migration risk.',
+            rules: ['Called both manually and automatically by oncall.yml'] },
+          { id: 'probe', label: 'Synthetic Probe', sub: 'Hourly / Burst Traffic', x: 45, y: 310, w: 175, h: 85, cat: 'otel',
+            file: 'scripts/synthetic_probe.py · .github/workflows/synthetic-probe.yml',
+            desc: 'Books and cancels synthetic sessions 400 days ahead (including :45 + 30m minute-overflow canary slots) to generate steady SLI telemetry.',
+            rules: ['Hourly cron keeps Render Free well under 750h/mo', 'Burst mode triggers alert during Chaos Drill'] },
+          { id: 'alert', label: 'Grafana Alert', sub: 'BookingErrorRatioHigh', x: 265, y: 310, w: 180, h: 85, cat: 'otel',
+            file: 'ops/grafana/alert-rule.json · contact-point-payload.tmpl',
+            desc: 'Fires when total bookings B >= 3 in 5m and error/total > 20% for 2m. Sends repository_dispatch event "grafana-alert" to GitHub API.',
+            rules: ['Alerts on real user impact (5xx errors), not CPU', 'NoData -> Normal prevents false pages when idle'] },
+          { id: 'gemini', label: 'oncall.yml (Gemini CLI)', sub: 'Issue + Rollback + Fix PR', x: 495, y: 310, w: 325, h: 85, cat: 'ops',
+            file: '.github/workflows/oncall.yml · .agents/roles/oncall.md',
+            desc: '1) Opens [incident] issue, 2) triggers rollback.yml on dev, 3) pulls Loki ERROR logs + git diff, 4) runs headless Gemini CLI to fix bug & un-skip test, 5) verifies pytest green & opens auto-merge PR.',
+            rules: ['Uses ONCALL_GH_TOKEN so the PR triggers ci.yml', 'Deterministic pytest check gates PR creation'] }
+        ],
+        edges: [
+          { from: 'ci', to: 'cd_dev', label: 'merge to main' },
+          { from: 'cd_dev', to: 'cd_prod', label: 'verified SHA' },
+          { from: 'probe', to: 'alert', label: 'SLI metrics' },
+          { from: 'alert', to: 'gemini', label: 'repository_dispatch' },
+          { from: 'gemini', to: 'rollback', label: '1. mitigate dev' },
+          { from: 'gemini', to: 'ci', label: '2. fix PR -> auto-merge' }
+        ]
+      },
+
+      agents: {
+        title: '5. SDD Multi-Agent Team & Context Management Harness',
+        subtitle: 'Covers Course Criteria 2 (Product Spec & Tracker), 3 (Agent Team), and 4 (Context Management).',
+        badge: 'Mode: agent-harness',
+        groups: [
+          { x: 20, y: 20, w: 820, h: 450, label: 'Google Antigravity Orchestrator + GitHub Issues (#1–#17) Shared State' }
+        ],
+        nodes: [
+          { id: 'a_human', label: 'Human Owner', sub: 'Approvals & Cloud Secrets', x: 40, y: 65, w: 170, h: 75, cat: 'ui',
+            file: 'docs/plan/EXECUTION_GUIDE.md §2',
+            desc: 'Approves product spec, merges reviewed PRs, configures Neon/Render/Grafana secrets, and approves production deployments.',
+            rules: ['Final authority on scope and production promotion'] },
+          { id: 'a_spec', label: 'Spec Agent', sub: 'Constitution · Spec · README', x: 255, y: 65, w: 175, h: 75, cat: 'api',
+            file: '.agents/roles/spec.md · specs/product-spec.md',
+            desc: 'Authors constitution.md, product-spec.md (16 ACs), nfr-observability.md, and final peer-review README.md.',
+            rules: ['Completed Phase 1 (commit ddc221a)'] },
+          { id: 'a_arch', label: 'Architect Agent', sub: 'OpenAPI · ERD · ADRs · Tasks', x: 475, y: 65, w: 185, h: 75, cat: 'api',
+            file: '.agents/roles/architect.md · specs/api/openapi.yaml',
+            desc: 'Authors data-model.md, openapi.yaml (Redocly 0 errors), architecture.md, ADRs 0001-0003, and GitHub Issues #2-#17.',
+            rules: ['Completed Phase 2 (commit 16d973b)'] },
+          { id: 'a_be', label: 'Backend Agent', sub: 'FastAPI · Domain · OTel (TDD)', x: 120, y: 205, w: 190, h: 80, cat: 'db',
+            file: '.agents/roles/backend.md (Issues #3, #4, #5, #6, #15)',
+            desc: 'Implements pure conflict engine, SQLAlchemy sync models, Alembic migrations, advisory-locked booking API, and OTel instrumentation via strict TDD.',
+            rules: ['Uses skill issue-workflow & commit trailers'] },
+          { id: 'a_fe', label: 'Frontend Agent', sub: 'React 19 · OpenAPI Client', x: 350, y: 205, w: 190, h: 80, cat: 'ui',
+            file: '.agents/roles/frontend.md (Issues #8, #9, #10, #11)',
+            desc: 'Builds DayBoard, BookingModal, and DirectoryPage against generated openapi-typescript schemas.',
+            rules: ['Zero hand-written API types'] },
+          { id: 'a_qa', label: 'QA Agent', sub: 'Independent AC & RTL Tests', x: 580, y: 205, w: 195, h: 80, cat: 'otel',
+            file: '.agents/roles/qa.md (Issues #7, #12)',
+            desc: 'Writes integration tests (test_ac_*) and OpenAPI contract test directly from specs/product-spec.md without reading implementation first.',
+            rules: ['Spec is truth if test and code disagree'] },
+          { id: 'a_rev', label: 'Reviewer Agent', sub: '10-Point Spec & Hygiene Gate', x: 230, y: 345, w: 200, h: 80, cat: 'ops',
+            file: '.agents/roles/reviewer.md',
+            desc: 'Reviews every PR diff against constitution.md, product-spec.md, openapi.yaml, and zero-PII/English-only rules before merge.',
+            rules: ['Read-only role; never edits code directly'] },
+          { id: 'a_devops', label: 'DevOps & On-Call', sub: 'Docker · CI/CD · Gemini SRE', x: 480, y: 345, w: 220, h: 80, cat: 'ops',
+            file: '.agents/roles/{devops,oncall}.md (Issues #2, #13, #14, #16)',
+            desc: 'Owns Dockerfile, compose, GitHub Actions CI/CD, Render/Neon deployment, Grafana alerts, and headless Gemini CLI incident remediation.',
+            rules: ['Verifies every phase with skill phase-gate'] }
+        ],
+        edges: [
+          { from: 'a_human', to: 'a_spec', label: 'approve spec' },
+          { from: 'a_spec', to: 'a_arch', label: '16 ACs + BRs' },
+          { from: 'a_arch', to: 'a_be', label: 'Issues #3-#6' },
+          { from: 'a_arch', to: 'a_fe', label: 'Issues #8-#11' },
+          { from: 'a_arch', to: 'a_qa', label: 'Issues #7, #12' },
+          { from: 'a_be', to: 'a_rev', label: 'PR + tests' },
+          { from: 'a_fe', to: 'a_rev', label: 'PR + tests' },
+          { from: 'a_qa', to: 'a_rev', label: 'AC test PR' },
+          { from: 'a_rev', to: 'a_devops', label: 'approved -> CI/CD' }
+        ]
+      }
+    };
+
+    let currentView = 'architecture';
+    let selectedNodeId = null;
+    let liveMotion = true;
+
+    function renderDiagram() {
+      const view = VIEWS[currentView];
+      document.getElementById('canvasTitle').textContent = view.title;
+      document.getElementById('canvasSubtitle').textContent = view.subtitle;
+      document.getElementById('viewBadge').textContent = view.badge;
+
+      const svg = document.getElementById('archSvg');
+      const nodeMap = {};
+      view.nodes.forEach(n => { nodeMap[n.id] = n; });
+
+      let html = `
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#94a3b8" />
+          </marker>
+          <marker id="arrow-active" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+          </marker>
+        </defs>
+      `;
+
+      view.groups.forEach(g => {
+        html += `
+          <g>
+            <rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="12"
+              fill="none" stroke="#64748b" stroke-dasharray="5 5" stroke-width="1.5" opacity="0.55" />
+            <text x="${g.x + 14}" y="${g.y + 22}" fill="#94a3b8" font-size="12" font-weight="600">${g.label}</text>
+          </g>
+        `;
+      });
+
+      view.edges.forEach(e => {
+        const a = nodeMap[e.from];
+        const b = nodeMap[e.to];
+        if (!a || !b) return;
+
+        const ax = a.x + a.w / 2;
+        const ay = a.y + a.h / 2;
+        const bx = b.x + b.w / 2;
+        const by = b.y + b.h / 2;
+
+        let x1 = ax, y1 = ay, x2 = bx, y2 = by;
+        if (Math.abs(bx - ax) > Math.abs(by - ay)) {
+          x1 = bx > ax ? a.x + a.w : a.x;
+          x2 = bx > ax ? b.x : b.x + b.w;
+        } else {
+          y1 = by > ay ? a.y + a.h : a.y;
+          y2 = by > ay ? b.y : b.y + b.h;
+        }
+
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+        const isConnected = !selectedNodeId || e.from === selectedNodeId || e.to === selectedNodeId;
+        const strokeColor = selectedNodeId && isConnected ? '#38bdf8' : '#64748b';
+        const marker = selectedNodeId && isConnected ? 'url(#arrow-active)' : 'url(#arrow)';
+        const animClass = liveMotion ? 'edge-live' : 'edge-static';
+        const dimClass = !isConnected ? 'dimmed' : (selectedNodeId ? 'highlighted-edge' : '');
+
+        html += `
+          <g class="${dimClass}">
+            <path d="M ${x1} ${y1} Q ${mx} ${y1}, ${mx} ${my} T ${x2} ${y2}"
+              fill="none" stroke="${strokeColor}" stroke-width="2" marker-end="${marker}" class="${animClass}" />
+            <rect x="${mx - 58}" y="${my - 10}" width="116" height="18" rx="4" fill="#0f172a" opacity="0.85" />
+            <text x="${mx}" y="${my + 3}" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="500">${e.label}</text>
+          </g>
+        `;
+      });
+
+      view.nodes.forEach(n => {
+        const c = COLORS[n.cat] || COLORS.api;
+        const isSelected = selectedNodeId === n.id;
+        const isNeighbor = !selectedNodeId || isSelected || view.edges.some(
+          e => (e.from === selectedNodeId && e.to === n.id) || (e.to === selectedNodeId && e.from === n.id)
+        );
+        const dimClass = !isNeighbor ? 'dimmed' : '';
+        const strokeW = isSelected ? 3.5 : 2;
+        const strokeCol = isSelected ? '#38bdf8' : c.stroke;
+
+        html += `
+          <g class="node-box ${dimClass}" onclick="selectNode('${n.id}')">
+            <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10"
+              fill="${c.fill}" stroke="${strokeCol}" stroke-width="${strokeW}" />
+            <circle cx="${n.x + 16}" cy="${n.y + 22}" r="5" fill="${c.badge}" />
+            <text x="${n.x + 28}" y="${n.y + 26}" fill="#f8fafc" font-size="13" font-weight="700">${n.label}</text>
+            <text x="${n.x + 16}" y="${n.y + 48}" fill="#cbd5e1" font-size="12">${n.sub}</text>
+          </g>
+        `;
+      });
+
+      svg.innerHTML = html;
+    }
+
+    function selectNode(nodeId) {
+      selectedNodeId = nodeId;
+      const view = VIEWS[currentView];
+      const node = view.nodes.find(n => n.id === nodeId);
+      if (!node) return;
+
+      document.getElementById('inspTitle').textContent = node.label;
+      document.getElementById('inspKind').textContent = node.sub;
+      document.getElementById('inspDesc').textContent = node.desc;
+      document.getElementById('inspFile').textContent = node.file;
+
+      const upstream = view.edges.filter(e => e.to === nodeId).map(e => {
+        const src = view.nodes.find(n => n.id === e.from);
+        return `${src ? src.label : e.from} (${e.label})`;
+      });
+      const downstream = view.edges.filter(e => e.from === nodeId).map(e => {
+        const dst = view.nodes.find(n => n.id === e.to);
+        return `${dst ? dst.label : e.to} (${e.label})`;
+      });
+
+      document.getElementById('inspUpstream').innerHTML = upstream.length
+        ? upstream.map(u => `<li>• ${u}</li>`).join('')
+        : '<li>None (Entry point)</li>';
+      document.getElementById('inspDownstream').innerHTML = downstream.length
+        ? downstream.map(d => `<li>• ${d}</li>`).join('')
+        : '<li>None (Terminal sink)</li>';
+
+      document.getElementById('inspRules').innerHTML = (node.rules || [])
+        .map(r => `<li>${r}</li>`).join('');
+
+      renderDiagram();
+    }
+
+    function clearSelection() {
+      selectedNodeId = null;
+      document.getElementById('inspTitle').textContent = 'Select any node on the canvas';
+      document.getElementById('inspKind').textContent = 'Overview';
+      document.getElementById('inspDesc').textContent =
+        'Click any box in the diagram to inspect its exact responsibility, contract rules, source file path, upstream callers, and downstream dependencies.';
+      document.getElementById('inspFile').textContent = 'docs/architecture.md · specs/api/openapi.yaml';
+      document.getElementById('inspUpstream').innerHTML = '<li>—</li>';
+      document.getElementById('inspDownstream').innerHTML = '<li>—</li>';
+      renderDiagram();
+    }
+
+    function switchView(viewKey) {
+      currentView = viewKey;
+      selectedNodeId = null;
+      document.querySelectorAll('.view-tab').forEach(btn => {
+        if (btn.getAttribute('data-view') === viewKey) {
+          btn.style.background = '#0284c7';
+          btn.style.color = '#ffffff';
+          btn.className = 'view-tab px-3.5 py-1.5 rounded-lg text-xs font-semibold';
+        } else {
+          btn.style.background = '';
+          btn.style.color = '';
+          btn.className = 'view-tab px-3.5 py-1.5 rounded-lg text-xs font-medium surface-Well';
+        }
+      });
+      renderDiagram();
+      const firstNode = VIEWS[viewKey].nodes[0];
+      if (firstNode) selectNode(firstNode.id);
+    }
+
+    function toggleMotion() {
+      liveMotion = !liveMotion;
+      const btn = document.getElementById('toggleMotionBtn');
+      btn.textContent = liveMotion ? '● Live Flow: ON' : '○ Live Flow: OFF';
+      renderDiagram();
+    }
+
+    function toggleTheme() {
+      document.documentElement.classList.toggle('light');
+    }
+
+    renderDiagram();
+    selectNode('api');
+  </script>
+</body>
+</html>
