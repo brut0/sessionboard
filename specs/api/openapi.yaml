@@ -1,0 +1,618 @@
+openapi: 3.1.0
+info:
+  title: SessionBoard API
+  version: 1.0.0
+  description: >-
+    REST API for SessionBoard — a tiny session scheduler for small studios
+    that prevents double bookings across specialists, rooms, and clients.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+tags:
+  - name: system
+    description: Health and version probes
+  - name: directory
+    description: Studio directory (specialists, clients, rooms)
+  - name: sessions
+    description: Daily session scheduling and status transitions
+
+paths:
+  /api/health:
+    get:
+      operationId: get_health
+      summary: Health check with database connectivity probe
+      tags: [system]
+      security: []
+      responses:
+        "200":
+          description: Application and database are healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Database is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/version:
+    get:
+      operationId: get_version
+      summary: Deployed commit SHA and environment name
+      tags: [system]
+      security: []
+      responses:
+        "200":
+          description: Current build version and environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+
+  /api/specialists:
+    get:
+      operationId: list_specialists
+      summary: List all specialists sorted alphabetically by name
+      tags: [directory]
+      security: []
+      responses:
+        "200":
+          description: List of specialists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Specialist"
+    post:
+      operationId: create_specialist
+      summary: Create a new specialist
+      tags: [directory]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecialistCreate"
+      responses:
+        "201":
+          description: Specialist created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Specialist"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+
+  /api/specialists/{specialist_id}:
+    delete:
+      operationId: delete_specialist
+      summary: Delete a specialist if not referenced by sessions
+      tags: [directory]
+      security: []
+      parameters:
+        - name: specialist_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Specialist deleted
+        "404":
+          description: Specialist not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "409":
+          description: Specialist has planned or existing sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+
+  /api/clients:
+    get:
+      operationId: list_clients
+      summary: List all clients sorted alphabetically by display_name
+      tags: [directory]
+      security: []
+      responses:
+        "200":
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Client"
+    post:
+      operationId: create_client
+      summary: Create a new client
+      tags: [directory]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientCreate"
+      responses:
+        "201":
+          description: Client created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+
+  /api/clients/{client_id}:
+    delete:
+      operationId: delete_client
+      summary: Delete a client if not referenced by sessions
+      tags: [directory]
+      security: []
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Client deleted
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "409":
+          description: Client has planned or existing sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+
+  /api/rooms:
+    get:
+      operationId: list_rooms
+      summary: List all rooms sorted alphabetically by name
+      tags: [directory]
+      security: []
+      responses:
+        "200":
+          description: List of rooms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Room"
+    post:
+      operationId: create_room
+      summary: Create a new room with a unique name
+      tags: [directory]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoomCreate"
+      responses:
+        "201":
+          description: Room created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Room"
+        "409":
+          description: Room name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+
+  /api/rooms/{room_id}:
+    delete:
+      operationId: delete_room
+      summary: Delete a room if not referenced by sessions
+      tags: [directory]
+      security: []
+      parameters:
+        - name: room_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Room deleted
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "409":
+          description: Room has planned or existing sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+
+  /api/sessions:
+    get:
+      operationId: list_sessions
+      summary: List all sessions for a given date sorted by room_id and start_time
+      tags: [sessions]
+      security: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          description: Target date in YYYY-MM-DD format
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Sessions for the requested date
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    post:
+      operationId: create_session
+      summary: Book a new session if no specialist, room, or client conflict exists
+      tags: [sessions]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCreate"
+      responses:
+        "201":
+          description: Session booked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          description: Referenced specialist, client, or room does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "409":
+          description: Booking conflicts with one or more existing sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictError"
+        "422":
+          description: Validation error (working hours, 15-min granularity, or duration)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+
+  /api/sessions/{session_id}:
+    patch:
+      operationId: update_session_status
+      summary: Transition a planned session to done or cancelled
+      tags: [sessions]
+      security: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionStatusUpdate"
+      responses:
+        "200":
+          description: Session status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "409":
+          description: Invalid status transition (only allowed from planned)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, db]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        db:
+          type: string
+          enum: [ok, error]
+
+    VersionResponse:
+      type: object
+      required: [version, env]
+      properties:
+        version:
+          type: string
+        env:
+          type: string
+          enum: [local, dev, prod, test]
+
+    SpecialistCreate:
+      type: object
+      required: [name, specialty]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        specialty:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    Specialist:
+      type: object
+      required: [id, name, specialty]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        specialty:
+          type: string
+
+    ClientCreate:
+      type: object
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    Client:
+      type: object
+      required: [id, display_name]
+      properties:
+        id:
+          type: integer
+        display_name:
+          type: string
+
+    RoomCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+
+    Room:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    SessionStatus:
+      type: string
+      enum: [planned, done, cancelled]
+
+    SessionTargetStatus:
+      type: string
+      enum: [done, cancelled]
+
+    SessionCreate:
+      type: object
+      required:
+        - specialist_id
+        - client_id
+        - room_id
+        - session_date
+        - start_time
+        - duration_minutes
+      properties:
+        specialist_id:
+          type: integer
+        client_id:
+          type: integer
+        room_id:
+          type: integer
+        session_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+        duration_minutes:
+          type: integer
+          minimum: 15
+          maximum: 180
+
+    SessionStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/SessionTargetStatus"
+
+    Session:
+      type: object
+      required:
+        - id
+        - specialist_id
+        - specialist_name
+        - client_id
+        - client_display_name
+        - room_id
+        - room_name
+        - session_date
+        - start_time
+        - end_time
+        - duration_minutes
+        - status
+      properties:
+        id:
+          type: integer
+        specialist_id:
+          type: integer
+        specialist_name:
+          type: string
+        client_id:
+          type: integer
+        client_display_name:
+          type: string
+        room_id:
+          type: integer
+        room_name:
+          type: string
+        session_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+        end_time:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+        duration_minutes:
+          type: integer
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+
+    ConflictType:
+      type: string
+      enum: [specialist, room, client]
+
+    ConflictItem:
+      type: object
+      required: [type, session_id]
+      properties:
+        type:
+          $ref: "#/components/schemas/ConflictType"
+        session_id:
+          type: integer
+
+    ConflictError:
+      type: object
+      required: [detail, conflicts]
+      properties:
+        detail:
+          type: string
+          enum: [conflict]
+        conflicts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConflictItem"
+
+    ErrorDetail:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+
+    ValidationError:
+      type: object
+      required: [loc, msg, type]
+      properties:
+        loc:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: integer
+        msg:
+          type: string
+        type:
+          type: string
+
+    HTTPValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
