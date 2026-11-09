@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import App from './App';
 
 describe('App component', () => {
-  it('renders Day Board tab by default and switches to Directory', () => {
+  it('renders Day Board tab by default and switches to Directory', async () => {
     render(<App />);
 
     expect(screen.getByText('SessionBoard')).toBeInTheDocument();
@@ -12,7 +12,7 @@ describe('App component', () => {
 
     // Default Day Board elements
     expect(screen.getByTestId('btn-new-session')).toBeInTheDocument();
-    expect(screen.getByText('Room A')).toBeInTheDocument();
+    expect(await screen.findByText('Room A')).toBeInTheDocument();
 
     // Switch to Directory
     fireEvent.click(screen.getByTestId('tab-directory'));

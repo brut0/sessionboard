@@ -1,8 +1,15 @@
 import createClient from 'openapi-fetch';
 import type { paths, components } from './schema';
 
+const getBaseUrl = (): string => {
+  if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
+    return 'http://localhost:8000';
+  }
+  return '';
+};
+
 export const apiClient = createClient<paths>({
-  baseUrl: '',
+  baseUrl: getBaseUrl(),
 });
 
 export type Specialist = components['schemas']['Specialist'];
