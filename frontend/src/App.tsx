@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Users, LayoutDashboard } from 'lucide-react';
 import { DayBoard } from './components/DayBoard';
 import { BookingModal } from './components/BookingModal';
+import { DirectoryPage } from './components/DirectoryPage';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'board' | 'directory'>('board');
@@ -67,14 +68,7 @@ export default function App() {
             refreshTrigger={refreshTrigger}
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {['Specialists', 'Clients', 'Rooms'].map((section) => (
-              <div key={section} className="bg-white rounded-xl border border-slate-200 shadow-xs p-5">
-                <h2 className="font-bold text-slate-800 text-base mb-4">{section}</h2>
-                <div className="py-8 text-center text-sm text-slate-400">Directory loaded</div>
-              </div>
-            ))}
-          </div>
+          <DirectoryPage />
         )}
       </main>
 
