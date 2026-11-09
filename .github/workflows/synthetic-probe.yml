@@ -1,0 +1,42 @@
+name: Synthetic Probe
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Probe run mode (once or burst)"
+        required: true
+        default: "once"
+        type: choice
+        options:
+          - once
+          - burst
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Execute Synthetic Probe
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run Probe against Dev
+        env:
+          DEV_URL: ${{ vars.DEV_URL }}
+          MODE: ${{ github.event.inputs.mode || 'once' }}
+        run: |
+          if [ -z "$DEV_URL" ]; then
+            echo "::warning::DEV_URL variable is not set. Skipping probe."
+            exit 0
+          fi
+          python scripts/synthetic_probe.py --base-url "$DEV_URL" --mode "$MODE"

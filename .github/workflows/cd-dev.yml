@@ -1,0 +1,107 @@
+name: CD Dev
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ci:
+    name: Run CI Validation
+    uses: ./.github/workflows/ci.yml
+
+  build-and-push:
+    name: Build & Push GHCR Image
+    needs: [ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lower case owner name
+        id: owner
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ steps.owner.outputs.owner }}/sessionboard:${{ github.sha }}
+            ghcr.io/${{ steps.owner.outputs.owner }}/sessionboard:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+
+  deploy-dev:
+    name: Deploy to Render Dev
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository for probe script
+        uses: actions/checkout@v4
+
+      - name: Trigger Render Dev Deploy Hook
+        id: deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_DEV }}
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK_DEV secret is not set. Skipping deploy hook."
+            echo "skipped=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          ENCODED_IMG="ghcr.io%2F${OWNER_LOWER}%2Fsessionboard%3A${SHA}"
+          echo "Triggering Render dev deployment with image: ${ENCODED_IMG}..."
+          curl -fsS -X POST "${HOOK}&imgURL=${ENCODED_IMG}"
+          echo "skipped=false" >> $GITHUB_OUTPUT
+
+      - name: Poll version until deployed
+        if: steps.deploy.outputs.skipped != 'true'
+        env:
+          DEV_URL: ${{ vars.DEV_URL }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$DEV_URL" ]; then
+            echo "::warning::DEV_URL variable is not set. Skipping version poll."
+            exit 0
+          fi
+          echo "Polling $DEV_URL/api/version for SHA $EXPECTED_SHA..."
+          START_TIME=$(date +%s)
+          TIMEOUT=600 # 10 minutes timeout
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$((CURRENT_TIME - START_TIME))
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "Timeout waiting for deployment."
+              exit 1
+            fi
+            VERSION=$(curl -s "$DEV_URL/api/version" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || true)
+            echo "Current version on dev: $VERSION (waiting for $EXPECTED_SHA)"
+            if [ "$VERSION" = "$EXPECTED_SHA" ]; then
+              echo "Deployment verified on dev!"
+              break
+            fi
+            sleep 15
+          done
+
+      - name: Run synthetic smoke probe
+        if: steps.deploy.outputs.skipped != 'true' && vars.DEV_URL != ''
+        run: |
+          python scripts/synthetic_probe.py --base-url ${{ vars.DEV_URL }} --mode once
