@@ -16,7 +16,7 @@ describe('App component', () => {
 
     // Switch to Directory
     fireEvent.click(screen.getByTestId('tab-directory'));
-    expect(screen.getByText('Specialists')).toBeInTheDocument();
+    expect(await screen.findByText('Specialists')).toBeInTheDocument();
     expect(screen.getByText('Clients')).toBeInTheDocument();
   });
 });
