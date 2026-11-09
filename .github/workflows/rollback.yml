@@ -1,0 +1,103 @@
+name: Rollback Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Target environment to roll back"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - prod
+      sha:
+        description: "Target commit SHA to roll back to"
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.env }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.env == 'prod' && 'production' || 'development' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify GHCR image exists
+        env:
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          IMAGE="ghcr.io/${OWNER_LOWER}/sessionboard:${SHA}"
+          echo "Verifying image exists in GHCR: $IMAGE"
+          docker manifest inspect "$IMAGE"
+
+      - name: Trigger Rollback Deploy Hook
+        env:
+          TARGET_ENV: ${{ inputs.env }}
+          HOOK_DEV: ${{ secrets.RENDER_DEPLOY_HOOK_DEV }}
+          HOOK_PROD: ${{ secrets.RENDER_DEPLOY_HOOK_PROD }}
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          if [ "$TARGET_ENV" = "prod" ]; then
+            HOOK="$HOOK_PROD"
+          else
+            HOOK="$HOOK_DEV"
+          fi
+          if [ -z "$HOOK" ]; then
+            echo "::error::Deploy hook for $TARGET_ENV is not set."
+            exit 1
+          fi
+          OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          ENCODED_IMG="ghcr.io%2F${OWNER_LOWER}%2Fsessionboard%3A${SHA}"
+          echo "Rolling back $TARGET_ENV to image: ${ENCODED_IMG}..."
+          curl -fsS -X POST "${HOOK}&imgURL=${ENCODED_IMG}"
+
+      - name: Poll version until rollback verified
+        env:
+          TARGET_ENV: ${{ inputs.env }}
+          DEV_URL: ${{ vars.DEV_URL }}
+          PROD_URL: ${{ vars.PROD_URL }}
+          EXPECTED_SHA: ${{ inputs.sha }}
+        run: |
+          if [ "$TARGET_ENV" = "prod" ]; then
+            URL="$PROD_URL"
+          else
+            URL="$DEV_URL"
+          fi
+          echo "Polling $URL/api/version for rolled-back SHA $EXPECTED_SHA..."
+          START_TIME=$(date +%s)
+          TIMEOUT=600
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$((CURRENT_TIME - START_TIME))
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "Timeout waiting for rollback."
+              exit 1
+            fi
+            VERSION=$(curl -s "$URL/api/version" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || true)
+            echo "Current version on $TARGET_ENV: $VERSION (waiting for $EXPECTED_SHA)"
+            if [ "$VERSION" = "$EXPECTED_SHA" ]; then
+              echo "Rollback verified on $TARGET_ENV!"
+              break
+            fi
+            sleep 15
+          done
+
+      - name: Write Rollback Summary
+        env:
+          TARGET_ENV: ${{ inputs.env }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          echo "### 🔄 Rollback Executed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Environment:** \`$TARGET_ENV\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target SHA:** \`$SHA\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Executed by:** \`${{ github.actor }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✅ Completed and verified against \`/api/version\`" >> $GITHUB_STEP_SUMMARY

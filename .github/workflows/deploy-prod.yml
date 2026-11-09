@@ -1,0 +1,83 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to deploy to production (required)"
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy-prod:
+    name: Deploy to Render Prod
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify GHCR image exists
+        env:
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          IMAGE="ghcr.io/${OWNER_LOWER}/sessionboard:${SHA}"
+          echo "Verifying image exists in GHCR: $IMAGE"
+          docker manifest inspect "$IMAGE"
+
+      - name: Trigger Render Prod Deploy Hook
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_PROD }}
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK_PROD secret is not set."
+            exit 1
+          fi
+          OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          ENCODED_IMG="ghcr.io%2F${OWNER_LOWER}%2Fsessionboard%3A${SHA}"
+          echo "Triggering Render prod deployment with image: ${ENCODED_IMG}..."
+          curl -fsS -X POST "${HOOK}&imgURL=${ENCODED_IMG}"
+
+      - name: Poll version until deployed
+        env:
+          PROD_URL: ${{ vars.PROD_URL }}
+          EXPECTED_SHA: ${{ inputs.sha }}
+        run: |
+          if [ -z "$PROD_URL" ]; then
+            echo "::error::PROD_URL variable is not set."
+            exit 1
+          fi
+          echo "Polling $PROD_URL/api/version for SHA $EXPECTED_SHA..."
+          START_TIME=$(date +%s)
+          TIMEOUT=600
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$((CURRENT_TIME - START_TIME))
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "Timeout waiting for deployment."
+              exit 1
+            fi
+            VERSION=$(curl -s "$PROD_URL/api/version" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || true)
+            echo "Current version on prod: $VERSION (waiting for $EXPECTED_SHA)"
+            if [ "$VERSION" = "$EXPECTED_SHA" ]; then
+              echo "Deployment verified on prod!"
+              break
+            fi
+            sleep 15
+          done
+
+      - name: Read-only smoke check
+        env:
+          PROD_URL: ${{ vars.PROD_URL }}
+        run: |
+          echo "Checking health..."
+          curl -fsS "$PROD_URL/api/health"
+          echo "Checking sessions..."
+          curl -fsS "$PROD_URL/api/sessions?date=$(date +%Y-%m-%d)"
