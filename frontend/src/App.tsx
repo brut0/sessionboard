@@ -1,10 +1,17 @@
 import { useState } from 'react';
 import { Users, LayoutDashboard } from 'lucide-react';
 import { DayBoard } from './components/DayBoard';
+import { BookingModal } from './components/BookingModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'board' | 'directory'>('board');
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const handleBookingSuccess = () => {
+    setRefreshTrigger((k) => k + 1);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -56,7 +63,8 @@ export default function App() {
           <DayBoard
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
-            onOpenBookingModal={() => {}}
+            onOpenBookingModal={() => setIsBookingModalOpen(true)}
+            refreshTrigger={refreshTrigger}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -69,6 +77,14 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Booking Modal */}
+      <BookingModal
+        isOpen={isBookingModalOpen}
+        onClose={() => setIsBookingModalOpen(false)}
+        onSuccess={handleBookingSuccess}
+        initialDate={selectedDate}
+      />
     </div>
   );
 }

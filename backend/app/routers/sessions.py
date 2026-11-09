@@ -178,7 +178,11 @@ def create_session(payload: SessionCreate, db: DbSession) -> Response:
             content={
                 "detail": "conflict",
                 "conflicts": [
-                    {"type": c.type, "conflicting_session_id": c.conflicting_session_id}
+                    {
+                        "type": c.type,
+                        "session_id": c.conflicting_session_id,
+                        "conflicting_session_id": c.conflicting_session_id,
+                    }
                     for c in conflicts
                 ],
             },

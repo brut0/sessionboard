@@ -22,7 +22,8 @@ class VersionResponse(BaseModel):
 
 class ConflictItem(BaseModel):
     type: Literal["specialist", "room", "client"]
-    conflicting_session_id: int
+    session_id: int
+    conflicting_session_id: int | None = None
 
 
 class ConflictError(BaseModel):
