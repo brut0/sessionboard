@@ -24,7 +24,7 @@ SessionBoard enforces a multi-layered automated testing pyramid:
 ```bash
 make test
 ```
-Runs both backend and frontend test suites (`test-backend` then `test-frontend`). On Windows environments where `make` is not natively installed, run the underlying commands:
+Runs both backend and frontend test suites (`test-backend` then `test-frontend`). Automatically executed on every pull request via GitHub Actions CI (`.github/workflows/ci.yml`). On Windows environments where `make` is not natively installed, run the underlying commands:
 ```powershell
 # Backend
 cd backend && uv run pytest -v
