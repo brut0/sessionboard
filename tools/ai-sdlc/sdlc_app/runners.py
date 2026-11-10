@@ -10,6 +10,7 @@ import sys
 import time
 from pathlib import Path
 
+from sdlc_app.bootstrap import sanitize_secrets
 from sdlc_app.hygiene import validate_text_hygiene
 from sdlc_app.schemas import GateCheckResult, GateName
 
@@ -30,8 +31,10 @@ def _run_step(
     extra_env: dict[str, str] | None = None,
 ) -> tuple[int, str, int]:
     env = os.environ.copy()
+    env.setdefault("GIT_TERMINAL_PROMPT", "0")
     if extra_env:
         env.update(extra_env)
+    secrets_to_scrub = list(extra_env.values()) if extra_env else []
     start = time.monotonic()
     try:
         proc = subprocess.run(
@@ -46,13 +49,21 @@ def _run_step(
         )
         duration_ms = int((time.monotonic() - start) * 1000)
         combined = "\n".join(part for part in (proc.stdout.strip(), proc.stderr.strip()) if part)
-        return proc.returncode, combined, duration_ms
+        return (
+            proc.returncode,
+            sanitize_secrets(combined, extra_secrets=secrets_to_scrub),
+            duration_ms,
+        )
     except subprocess.TimeoutExpired:
         duration_ms = int((time.monotonic() - start) * 1000)
         return 124, f"Command timed out after {timeout}s: {' '.join(cmd)}", duration_ms
     except FileNotFoundError as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
-        return 127, f"Executable not found: {exc}", duration_ms
+        return (
+            127,
+            sanitize_secrets(f"Executable not found: {exc}", extra_secrets=secrets_to_scrub),
+            duration_ms,
+        )
 
 
 def run_gate(repo_root: Path, gate: GateName) -> GateCheckResult:
@@ -228,7 +239,16 @@ def commit_changes(
     c1, o1, _ = _run_step(["git", "add", "-A"], cwd=repo_root, timeout=20)
     if c1 != 0:
         raise RuntimeError(o1 or "git add failed")
-    c2, o2, _ = _run_step(["git", "commit", "-m", full_msg], cwd=repo_root, timeout=30)
+    commit_cmd = ["git"]
+    if (
+        os.environ.get("SDLC_NON_INTERACTIVE", "").strip().lower() in {"1", "true", "yes"}
+        or os.environ.get("RENDER", "").strip().lower() in {"1", "true", "yes"}
+        or not sys.stdin.isatty()
+    ):
+        commit_cmd.extend(["-c", "commit.gpgsign=false", "commit", "--no-gpg-sign", "-m", full_msg])
+    else:
+        commit_cmd.extend(["commit", "-m", full_msg])
+    c2, o2, _ = _run_step(commit_cmd, cwd=repo_root, timeout=30)
     if c2 != 0:
         raise RuntimeError(o2 or "git commit failed")
     return o2

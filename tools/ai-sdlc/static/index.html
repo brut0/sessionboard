@@ -17,10 +17,14 @@
     </div>
 
     <div class="topbar-status">
-      <span id="git-badge" class="badge badge-neutral">Branch: checking...</span>
-      <span id="llm-badge" class="badge badge-neutral">LLM: loading...</span>
-      <button type="button" id="open-settings-btn" class="btn btn-secondary">
+      <span id="auth-badge" class="badge badge-neutral">Auth: checking...</span>
+      <span id="git-badge" class="badge badge-neutral" hidden>Branch: checking...</span>
+      <span id="llm-badge" class="badge badge-neutral" hidden>LLM: loading...</span>
+      <button type="button" id="open-settings-btn" class="btn btn-secondary" hidden>
         API Settings
+      </button>
+      <button type="button" id="logout-btn" class="btn btn-ghost" hidden>
+        Sign Out
       </button>
     </div>
   </header>
@@ -28,7 +32,67 @@
   <div class="live-regions" aria-live="polite" id="status-banner" role="status"></div>
   <div class="live-regions live-error" aria-live="assertive" id="error-banner" role="alert" hidden></div>
 
-  <div class="workspace-grid">
+  <section id="auth-gate" class="auth-gate-shell" hidden aria-labelledby="login-heading">
+    <div class="card auth-gate-card">
+      <h2 id="login-heading">Owner Sign-In Required</h2>
+      <p id="auth-gate-message" class="muted">
+        This companion AI SDLC workbench controls repository specs, code generation, Git commits,
+        and GitHub PRs. Enter the owner passphrase configured on this host to continue.
+      </p>
+
+      <form id="owner-login-form" method="POST" action="/api/auth/login" aria-labelledby="login-heading">
+        <div class="field">
+          <label for="owner-username">Owner account</label>
+          <input
+            type="text"
+            id="owner-username"
+            name="username"
+            value="owner"
+            readonly
+            autocomplete="username"
+            autocorrect="off"
+            autocapitalize="none"
+            spellcheck="false"
+            enterkeyhint="next"
+          >
+        </div>
+
+        <div class="field">
+          <label for="owner-password">Owner passphrase <span aria-hidden="true">*</span></label>
+          <div class="key-row">
+            <input
+              type="password"
+              id="owner-password"
+              name="password"
+              required
+              minlength="12"
+              autocomplete="current-password"
+              enterkeyhint="done"
+              aria-describedby="login-help"
+            >
+            <button
+              type="button"
+              id="toggle-login-password"
+              class="btn btn-secondary"
+              aria-pressed="false"
+              aria-label="Show password"
+            >
+              Show
+            </button>
+          </div>
+          <span id="login-help" class="hint">
+            Minimum 12 characters (`SDLC_OWNER_PASSWORD`). Cookie is signed and HttpOnly.
+          </span>
+        </div>
+
+        <button type="submit" id="owner-login-btn" class="btn btn-primary full-width">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <div id="workspace-grid" class="workspace-grid" hidden>
     <aside class="sidebar" aria-label="Pipeline runs and new feature request">
       <section class="card">
         <h2>New Feature or Change</h2>

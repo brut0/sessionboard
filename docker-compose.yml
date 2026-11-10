@@ -44,6 +44,32 @@ services:
     networks:
       - sessionboard-net
 
+  # Optional full-suite developer companion: launch via `docker compose --profile sdlc up --build`
+  ai-sdlc:
+    build:
+      context: ./tools/ai-sdlc
+      dockerfile: Dockerfile
+    profiles: ["sdlc"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      APP_ENV: local
+      SDLC_REPO_ROOT: /workspace
+      SDLC_STATE_DIR: /workspace/.local/ai-sdlc
+      SDLC_REQUIRE_AUTH: ${SDLC_REQUIRE_AUTH:-false}
+      SDLC_OWNER_PASSWORD: ${SDLC_OWNER_PASSWORD:-}
+      SDLC_SESSION_SECRET: ${SDLC_SESSION_SECRET:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+    volumes:
+      - .:/workspace
+    networks:
+      - sessionboard-net
+
 volumes:
   pgdata:
 

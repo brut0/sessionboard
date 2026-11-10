@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from sdlc_app.auth import (
+    HTTP_SESSION_COOKIE,
+    HTTPS_SESSION_COOKIE,
+    LoginRateLimiter,
+    constant_time_equal,
+    create_session_token,
+    extract_client_ip,
+    is_https_request,
+    is_request_authenticated,
+)
+from sdlc_app.bootstrap import bootstrap_workspace
 from sdlc_app.config import WorkbenchSettings, get_settings
 from sdlc_app.hygiene import HygieneViolationError
 from sdlc_app.llm import LLMClient, LLMError, mask_secret
@@ -37,14 +49,54 @@ from sdlc_app.schemas import (
     CreateRunRequest,
     GateRequest,
     HealthResponse,
+    LoginRequest,
     PipelineRunSummary,
     RunState,
+    SessionStatus,
     StageName,
     StageRequest,
 )
 from sdlc_app.store import RunStore
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+PUBLIC_AUTH_ROUTES = {
+    "/",
+    "/favicon.ico",
+    "/api/health",
+    "/api/auth/session",
+    "/api/auth/login",
+    "/api/auth/logout",
+}
+
+CSP_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self'; "
+    "connect-src 'self'; "
+    "img-src 'self' data:; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "frame-ancestors 'none'; "
+    "form-action 'self'"
+)
+
+
+def _with_security_headers(response: Response, request: Request) -> Response:
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), geolocation=(), microphone=()",
+    )
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+    response.headers.setdefault("Content-Security-Policy", CSP_POLICY)
+    response.headers.setdefault("Vary", "Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site")
+    if is_https_request(request):
+        response.headers.setdefault("Strict-Transport-Security", "max-age=300")
+    return response
 
 
 def _build_llm_from_settings(settings: WorkbenchSettings) -> LLMClient:
@@ -62,15 +114,63 @@ def create_app(
     llm_factory: Callable[[WorkbenchSettings], Any] | None = None,
 ) -> FastAPI:
     active_settings = (settings or get_settings()).load_persisted_overrides()
+    if active_settings.clone_repo_url.strip():
+        bootstrap_workspace(
+            active_settings.repo_root,
+            clone_repo_url=active_settings.clone_repo_url,
+            gh_token=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", ""),
+        )
+
     state: dict[str, WorkbenchSettings] = {"settings": active_settings}
     store = RunStore(active_settings.runs_dir)
     build_llm = llm_factory or _build_llm_from_settings
+    rate_limiter = LoginRateLimiter()
 
     app = FastAPI(
         title="SessionBoard AI SDLC Workbench",
         version="0.1.0",
         description="Companion SDD/TDD Web Workbench alongside SessionBoard",
     )
+
+    @app.middleware("http")
+    async def security_and_auth_middleware(request: Request, call_next: Callable) -> Response:
+        cfg = state["settings"]
+
+        if cfg.auth_required and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            sec_site = request.headers.get("sec-fetch-site")
+            if sec_site and sec_site.strip().lower() not in {"same-origin", "none"}:
+                resp = JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={"detail": "Cross-site mutating requests are forbidden."},
+                )
+                return _with_security_headers(resp, request)
+
+        path = request.url.path
+        requires_owner = path in {"/docs", "/redoc", "/openapi.json"} or (
+            path.startswith("/api/") and path not in PUBLIC_AUTH_ROUTES
+        )
+        if cfg.auth_required and requires_owner:
+            if not cfg.auth_configured:
+                resp = JSONResponse(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    content={
+                        "detail": (
+                            "Workbench fail-closed: SDLC_OWNER_PASSWORD (min 12 chars) "
+                            "is not configured."
+                        )
+                    },
+                )
+                return _with_security_headers(resp, request)
+            if not is_request_authenticated(request, cfg):
+                resp = JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={"detail": "Owner authentication required."},
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+                return _with_security_headers(resp, request)
+
+        response = await call_next(request)
+        return _with_security_headers(response, request)
 
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -79,12 +179,91 @@ def create_app(
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
+    @app.get("/api/auth/session", response_model=SessionStatus)
+    def get_auth_session(request: Request) -> SessionStatus:
+        cfg = state["settings"]
+        return SessionStatus(
+            auth_required=cfg.auth_required,
+            configured=cfg.auth_configured,
+            authenticated=is_request_authenticated(request, cfg),
+        )
+
+    @app.post("/api/auth/login", response_model=SessionStatus)
+    def owner_login(body: LoginRequest, request: Request, response: Response) -> Any:
+        cfg = state["settings"]
+        if not cfg.auth_required:
+            return SessionStatus(auth_required=False, configured=True, authenticated=True)
+        if not cfg.auth_configured:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Workbench fail-closed: SDLC_OWNER_PASSWORD (min 12 chars) is not configured."
+                ),
+            )
+
+        client_ip = extract_client_ip(request)
+        retry_after = rate_limiter.check_locked(client_ip)
+        if retry_after is not None:
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={"detail": f"Too many failed login attempts. Retry in {retry_after}s."},
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        if not constant_time_equal(body.password, cfg.owner_password):
+            rate_limiter.record_failure(client_ip)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid owner password.",
+            )
+
+        rate_limiter.reset(client_ip)
+        token = create_session_token(cfg)
+        secure_cookie = is_https_request(request)
+        cookie_name = HTTPS_SESSION_COOKIE if secure_cookie else HTTP_SESSION_COOKIE
+        response.set_cookie(
+            key=cookie_name,
+            value=token,
+            max_age=cfg.session_ttl_seconds,
+            httponly=True,
+            secure=secure_cookie,
+            samesite="lax",
+            path="/",
+        )
+        return SessionStatus(auth_required=True, configured=True, authenticated=True)
+
+    @app.post("/api/auth/logout", response_model=SessionStatus)
+    def owner_logout(request: Request, response: Response) -> SessionStatus:
+        cfg = state["settings"]
+        secure_cookie = is_https_request(request)
+        response.delete_cookie(key=HTTP_SESSION_COOKIE, path="/")
+        response.delete_cookie(key=HTTPS_SESSION_COOKIE, path="/", secure=secure_cookie)
+        response.headers["Clear-Site-Data"] = '"cookies", "storage", "cache"'
+        return SessionStatus(
+            auth_required=cfg.auth_required,
+            configured=cfg.auth_configured,
+            authenticated=not cfg.auth_required,
+        )
+
     @app.get("/api/health", response_model=HealthResponse)
-    def health() -> HealthResponse:
-        git_info = get_git_overview(state["settings"].repo_root)
+    def health(request: Request) -> HealthResponse:
+        cfg = state["settings"]
+        authed = is_request_authenticated(request, cfg)
+        if cfg.auth_required and not authed:
+            return HealthResponse(
+                status="ok" if cfg.auth_configured else "unconfigured",
+                auth_required=True,
+                auth_configured=cfg.auth_configured,
+                authenticated=False,
+            )
+
+        git_info = get_git_overview(cfg.repo_root)
         return HealthResponse(
             status="ok",
-            repo_root=str(state["settings"].repo_root),
+            auth_required=cfg.auth_required,
+            auth_configured=cfg.auth_configured,
+            authenticated=True,
+            repo_root=str(cfg.repo_root),
             git_branch=str(git_info["branch"]),
             gh_authenticated=bool(git_info["gh_authenticated"]),
             gemini_cli_available=bool(git_info["gemini_cli_available"]),
