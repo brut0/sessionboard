@@ -4,9 +4,20 @@ const state = {
   activeRun: null,
   lastRenderedRunId: null,
   runs: [],
+  session: null,
 };
 
 const el = {
+  authBadge: document.getElementById("auth-badge"),
+  authGate: document.getElementById("auth-gate"),
+  authGateMessage: document.getElementById("auth-gate-message"),
+  ownerLoginForm: document.getElementById("owner-login-form"),
+  ownerPassword: document.getElementById("owner-password"),
+  ownerLoginBtn: document.getElementById("owner-login-btn"),
+  toggleLoginPwBtn: document.getElementById("toggle-login-password"),
+  logoutBtn: document.getElementById("logout-btn"),
+  workspaceGrid: document.getElementById("workspace-grid"),
+  openSettingsBtn: document.getElementById("open-settings-btn"),
   gitBadge: document.getElementById("git-badge"),
   llmBadge: document.getElementById("llm-badge"),
   statusBanner: document.getElementById("status-banner"),
@@ -49,8 +60,49 @@ function setError(message) {
   el.errorBanner.hidden = false;
 }
 
+function renderAuthView(session) {
+  state.session = session;
+  const locked = Boolean(session.auth_required && (!session.configured || !session.authenticated));
+
+  el.authGate.hidden = !locked;
+  el.workspaceGrid.hidden = locked;
+  el.gitBadge.hidden = locked;
+  el.llmBadge.hidden = locked;
+  el.openSettingsBtn.hidden = locked;
+  el.logoutBtn.hidden = !(session.auth_required && session.authenticated);
+
+  if (!session.auth_required) {
+    el.authBadge.textContent = "Auth: Local Open";
+    el.authBadge.className = "badge badge-neutral";
+    return;
+  }
+
+  if (!session.configured) {
+    el.authBadge.textContent = "Auth: Fail-Closed (Unconfigured)";
+    el.authBadge.className = "badge badge-err";
+    el.authGateMessage.textContent =
+      "Workbench fail-closed: SDLC_OWNER_PASSWORD (min 12 chars) is missing on this server.";
+    el.ownerPassword.disabled = true;
+    el.ownerLoginBtn.disabled = true;
+    return;
+  }
+
+  el.ownerPassword.disabled = false;
+  el.ownerLoginBtn.disabled = false;
+  if (session.authenticated) {
+    el.authBadge.textContent = "Owner: Verified";
+    el.authBadge.className = "badge badge-ok";
+  } else {
+    el.authBadge.textContent = "Locked: Owner Only";
+    el.authBadge.className = "badge badge-warn";
+    el.authGateMessage.textContent =
+      "This companion AI SDLC workbench controls repository specs, code generation, Git commits, and GitHub PRs. Enter the owner passphrase configured on this host to continue.";
+  }
+}
+
 async function apiJson(path, options = {}) {
   const res = await fetch(path, {
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     ...options,
   });
@@ -62,6 +114,9 @@ async function apiJson(path, options = {}) {
     data = { detail: text };
   }
   if (!res.ok) {
+    if (res.status === 401 && path !== "/api/auth/login") {
+      renderAuthView({ auth_required: true, configured: true, authenticated: false });
+    }
     throw new Error(data?.detail || `HTTP ${res.status}`);
   }
   return data;
@@ -566,4 +621,65 @@ document.getElementById("settings-form").addEventListener("submit", async (e) =>
   }
 });
 
-refreshAll().catch((err) => setError(`Startup check failed: ${err.message}`));
+async function bootstrapApp() {
+  try {
+    const session = await apiJson("/api/auth/session");
+    renderAuthView(session);
+    if (!session.auth_required || (session.configured && session.authenticated)) {
+      await refreshAll();
+    } else if (session.configured) {
+      setStatus("Sign in with the owner passphrase to unlock the workbench.");
+    } else {
+      setError("Server fail-closed: SDLC_OWNER_PASSWORD (minimum 12 chars) is missing.");
+    }
+  } catch (err) {
+    setError(`Startup check failed: ${err.message}`);
+  }
+}
+
+el.toggleLoginPwBtn.addEventListener("click", () => {
+  const show = el.ownerPassword.type === "password";
+  el.ownerPassword.type = show ? "text" : "password";
+  el.toggleLoginPwBtn.setAttribute("aria-pressed", String(show));
+  el.toggleLoginPwBtn.textContent = show ? "Hide" : "Show";
+});
+
+el.ownerLoginForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  el.ownerLoginBtn.disabled = true;
+  try {
+    const session = await apiJson("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password: el.ownerPassword.value }),
+    });
+    el.ownerPassword.value = "";
+    renderAuthView(session);
+    await refreshAll();
+    setStatus("Owner authenticated. Workbench unlocked.");
+  } catch (err) {
+    setError(err.message);
+    el.ownerPassword.focus();
+  } finally {
+    el.ownerLoginBtn.disabled = false;
+  }
+});
+
+el.logoutBtn.addEventListener("click", async () => {
+  try {
+    const session = await apiJson("/api/auth/logout", { method: "POST", body: "{}" });
+    state.activeRun = null;
+    state.runs = [];
+    el.cfgApiKey.value = "";
+    if (el.settingsDialog.open) {
+      el.settingsDialog.close();
+    }
+    el.runWorkspace.hidden = true;
+    el.emptyState.hidden = false;
+    renderAuthView(session);
+    setStatus("Signed out. Owner session terminated.");
+  } catch (err) {
+    setError(err.message);
+  }
+});
+
+bootstrapApp();

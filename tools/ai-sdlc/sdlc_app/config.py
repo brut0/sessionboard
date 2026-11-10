@@ -22,7 +22,7 @@ def detect_repo_root(start: Path | None = None) -> Path:
     for parent in [cursor, *cursor.parents]:
         if (parent / "AGENTS.md").is_file() and (parent / "specs").is_dir():
             return parent
-    # Fallback two levels above sdlc_app/ (tools/ai-sdlc -> repo root)
+    # Fallback three levels above sdlc_app/ (tools/ai-sdlc -> repo root)
     return Path(__file__).resolve().parents[3]
 
 
@@ -37,6 +37,17 @@ class WorkbenchSettings(BaseSettings):
     )
 
     repo_root: Path = Field(default_factory=detect_repo_root, alias="SDLC_REPO_ROOT")
+    app_version: str = Field(default="local", alias="SDLC_APP_VERSION")
+    app_env: str = Field(default="local", alias="APP_ENV")
+    render_env: str = Field(default="", alias="RENDER")
+    require_auth: bool = Field(default=False, alias="SDLC_REQUIRE_AUTH")
+    owner_password: str = Field(default="", alias="SDLC_OWNER_PASSWORD")
+    session_secret: str = Field(default="", alias="SDLC_SESSION_SECRET")
+    session_ttl_seconds: int = Field(default=43200, alias="SDLC_SESSION_TTL_SECONDS")
+    clone_repo_url: str = Field(default="", alias="SDLC_CLONE_REPO_URL")
+    state_dir_override: Path | None = Field(default=None, alias="SDLC_STATE_DIR")
+    non_interactive: bool = Field(default=False, alias="SDLC_NON_INTERACTIVE")
+
     llm_provider: Literal["gemini", "openai"] = Field(default="gemini", alias="LLM_PROVIDER")
     llm_model: str = Field(default="gemini-2.5-flash", alias="LLM_MODEL")
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
@@ -47,7 +58,27 @@ class WorkbenchSettings(BaseSettings):
     )
 
     @property
+    def auth_required(self) -> bool:
+        """Fail closed whenever auth is requested, password set, or deployed non-locally."""
+        if self.require_auth:
+            return True
+        if self.owner_password.strip():
+            return True
+        if self.app_env.strip().lower() != "local":
+            return True
+        return self.render_env.strip().lower() in {"1", "true", "yes"}
+
+    @property
+    def auth_configured(self) -> bool:
+        """Require at least a 12-character non-blank owner passphrase when auth is active."""
+        if not self.auth_required:
+            return True
+        return len(self.owner_password) >= 12 and bool(self.owner_password.strip())
+
+    @property
     def state_dir(self) -> Path:
+        if self.state_dir_override is not None:
+            return self.state_dir_override.resolve()
         return self.repo_root / ".local" / "ai-sdlc"
 
     @property
@@ -62,7 +93,7 @@ class WorkbenchSettings(BaseSettings):
         return self.gemini_api_key if self.llm_provider == "gemini" else self.openai_api_key
 
     def load_persisted_overrides(self) -> WorkbenchSettings:
-        """Apply git-ignored runtime overrides saved from the Web UI if present."""
+        """Apply git-ignored LLM runtime overrides saved from the Web UI if present."""
         cfg_file = self.runtime_config_file
         if not cfg_file.is_file():
             return self
@@ -85,7 +116,7 @@ class WorkbenchSettings(BaseSettings):
         return self.model_copy(update=updates)
 
     def save_persisted_overrides(self) -> None:
-        """Save UI-updated config strictly inside git-ignored .local/ai-sdlc/."""
+        """Save UI-updated LLM config only (never persisting auth credentials to disk)."""
         self.state_dir.mkdir(parents=True, exist_ok=True)
         payload = {
             "llm_provider": self.llm_provider,

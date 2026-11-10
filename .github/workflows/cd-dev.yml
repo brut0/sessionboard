@@ -105,3 +105,91 @@ jobs:
         if: steps.deploy.outputs.skipped != 'true' && vars.DEV_URL != ''
         run: |
           python scripts/synthetic_probe.py --base-url ${{ vars.DEV_URL }} --mode once
+
+  build-and-push-ai-sdlc:
+    name: Build & Push AI SDLC Workbench Image
+    needs: [ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lower case owner name
+        id: owner
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push AI SDLC workbench image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./tools/ai-sdlc
+          push: true
+          tags: |
+            ghcr.io/${{ steps.owner.outputs.owner }}/sessionboard-ai-sdlc:${{ github.sha }}
+            ghcr.io/${{ steps.owner.outputs.owner }}/sessionboard-ai-sdlc:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+
+  deploy-ai-sdlc:
+    name: Deploy Companion AI SDLC Workbench
+    needs: [build-and-push-ai-sdlc]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render AI SDLC Deploy Hook
+        id: deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_AI_SDLC }}
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK_AI_SDLC secret is not set. Skipping AI SDLC deploy hook."
+            echo "skipped=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          ENCODED_IMG="ghcr.io%2F${OWNER_LOWER}%2Fsessionboard-ai-sdlc%3A${SHA}"
+          echo "Triggering Render AI SDLC deployment with image: ${ENCODED_IMG}..."
+          curl -fsS -X POST "${HOOK}&imgURL=${ENCODED_IMG}"
+          echo "skipped=false" >> $GITHUB_OUTPUT
+
+      - name: Verify AI SDLC version & fail-closed owner gate
+        if: steps.deploy.outputs.skipped != 'true' && vars.AI_SDLC_URL != ''
+        env:
+          AI_SDLC_URL: ${{ vars.AI_SDLC_URL }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          echo "Polling $AI_SDLC_URL/api/health for SHA $EXPECTED_SHA..."
+          START_TIME=$(date +%s)
+          TIMEOUT=600
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$((CURRENT_TIME - START_TIME))
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "Timeout waiting for AI SDLC workbench."
+              exit 1
+            fi
+            VERSION=$(curl -s "$AI_SDLC_URL/api/health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)
+            echo "Current version on ai-sdlc: $VERSION (waiting for $EXPECTED_SHA)"
+            if [ "$VERSION" = "$EXPECTED_SHA" ]; then
+              echo "AI SDLC deployment SHA verified!"
+              break
+            fi
+            sleep 15
+          done
+
+          UNAUTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$AI_SDLC_URL/api/config")
+          echo "Unauthenticated GET /api/config returned HTTP $UNAUTH_CODE"
+          if [ "$UNAUTH_CODE" != "401" ]; then
+            echo "::error::Expected 401 on unauthenticated /api/config (got $UNAUTH_CODE)."
+            exit 1
+          fi

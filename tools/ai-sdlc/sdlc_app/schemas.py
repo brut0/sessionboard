@@ -30,10 +30,25 @@ GateName = Literal[
 
 class HealthResponse(BaseModel):
     status: str
-    repo_root: str
-    git_branch: str
-    gh_authenticated: bool
-    gemini_cli_available: bool
+    version: str = "local"
+    auth_required: bool = False
+    auth_configured: bool = True
+    authenticated: bool = True
+    workspace_ready: bool = True
+    repo_root: str | None = None
+    git_branch: str | None = None
+    gh_authenticated: bool | None = None
+    gemini_cli_available: bool | None = None
+
+
+class SessionStatus(BaseModel):
+    auth_required: bool
+    configured: bool
+    authenticated: bool
+
+
+class LoginRequest(BaseModel):
+    password: str = Field(..., min_length=1, max_length=512)
 
 
 class ConfigStatus(BaseModel):

@@ -28,7 +28,7 @@ Files marked with a phase do not exist until that phase is done. If you need one
 - `docker compose up --build` (or `make up`) — full system: app http://localhost:8000, Grafana http://localhost:3000
 - `make test` — backend unit + integration (Docker required) and frontend tests
 - `make lint` — ruff + TypeScript typecheck
-- `make ai-sdlc` — companion AI SDLC Web Workbench on http://localhost:8090 (`tools/ai-sdlc/`)
+- `make ai-sdlc` — companion AI SDLC Web Workbench on http://localhost:8090 (`tools/ai-sdlc/`), or `docker compose --profile sdlc up --build` for full-suite Compose (supports owner-gated `SDLC_REQUIRE_AUTH=true`)
 - `python scripts/check_repo_hygiene.py` — English-only and forbidden-terms check
 
 ## Hard rules
