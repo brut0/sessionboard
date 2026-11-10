@@ -44,5 +44,5 @@ def check_db_health() -> bool:
             conn.execute(text("SELECT 1"))
         return True
     except Exception as exc:
-        logger.warning("Database health check failed: %s", exc)
+        logger.warning("Database health check failed: %s", type(exc).__name__)
         return False

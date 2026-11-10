@@ -13,7 +13,7 @@
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-Grafana_LGTM-F46800?style=for-the-badge&logo=grafana&logoColor=white)](specs/nfr-observability.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 
-[**📖 Product Spec**](specs/product-spec.md) · [**🔌 OpenAPI 3.1 Contract**](specs/api/openapi.yaml) · [**🏛️ Architecture & ADRs**](docs/architecture.md) · [**🧭 Interactive Archify Explorer (`HTML`)**](docs/architecture-explorer.html) · [**🧪 Testing**](docs/testing.md) · [**🚀 Deployment**](docs/deployment.md) · [**🛠️ Dual AI SDLC**](docs/ai-sdlc.md) · [**🤖 Agent Team**](docs/agents/team.md) · [**📋 Public Issue Tracker**](https://github.com/brut0/sessionboard/issues)
+[**📖 Product Spec**](specs/product-spec.md) · [**🔌 OpenAPI 3.1 Contract**](specs/api/openapi.yaml) · [**🏛️ Architecture & ADRs**](docs/architecture.md) · [**🧭 Interactive Archify Explorer (`HTML`)**](docs/architecture-explorer.html) · [**🧪 Testing**](docs/testing.md) · [**🚀 Deployment**](docs/deployment.md) · [**📡 Observability**](docs/observability.md) · [**🛠️ Dual AI SDLC**](docs/ai-sdlc.md) · [**🤖 Agent Team**](docs/agents/team.md) · [**📋 Public Issue Tracker**](https://github.com/brut0/sessionboard/issues)
 
 </div>
 
@@ -38,11 +38,11 @@ This table guides peer reviewers directly to the evidence for every grading crit
 | **3** | **Agent Team Specification** | **2 pts** | ✅ | [`docs/agents/team.md`](docs/agents/team.md) + 8 role prompts in [`.agents/roles/`](.agents/roles/) + 4 workflow skills in [`.agents/skills/`](.agents/skills/) + dispatch matrix in [`docs/plan/EXECUTION_GUIDE.md` §3.5](docs/plan/EXECUTION_GUIDE.md) |
 | **4** | **Context Management** | **2 pts** | ✅ | [`AGENTS.md`](AGENTS.md) entry point linking modular docs: [`docs/process.md`](docs/process.md), [`docs/agents/team.md`](docs/agents/team.md), [`docs/architecture.md`](docs/architecture.md), [`docs/testing.md`](docs/testing.md), [`docs/deployment.md`](docs/deployment.md), [`docs/ai-sdlc.md`](docs/ai-sdlc.md), [`docs/adr/`](docs/adr/), [`specs/`](specs/) |
 | **5** | **Application (Full-Stack + DB)** | **2 pts** | ✅ | React 19 SPA (`DayBoard`, `BookingModal`, `DirectoryPage`) ↔ FastAPI REST API ↔ PostgreSQL 16 with `pg_advisory_xact_lock` (Issues [`#2`–`#11`](https://github.com/brut0/sessionboard/issues), PRs `#18`–`#27`) |
-| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **54 core app tests passing** (39 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract tests, 15 frontend Vitest/RTL/MSW tests) + **39 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`](https://github.com/brut0/sessionboard/issues)) |
+| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **58 core app tests passing** (43 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract + zero-PII telemetry tests, 15 frontend Vitest/RTL/MSW tests) + **39 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`, `#15`](https://github.com/brut0/sessionboard/issues)) |
 | **7** | **Containerization** | **2 pts** | ✅ | Multi-stage [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) (`db` + `app` + `otel-lgtm`) + companion [`tools/ai-sdlc/Dockerfile`](tools/ai-sdlc/Dockerfile) (`--profile sdlc`, Issue [`#2`](https://github.com/brut0/sessionboard/issues/2), PR `#18`) |
 | **8** | **Deployment** | **2 pts** | ✅ | Live on Render Free + isolated Neon PostgreSQL 16 DBs: [`sessionboard-dev`](https://sessionboard-dev.onrender.com), [`sessionboard-prod`](https://sessionboard-prod.onrender.com), and owner-gated companion [`essionboard-ai-sdlc`](https://essionboard-ai-sdlc.onrender.com) (`401` unauthenticated); see [`docs/deployment.md` §7](docs/deployment.md#7-live-verification--rollback-evidence-phase-7-gate) (Issue [`#14`](https://github.com/brut0/sessionboard/issues/14)) |
 | **9** | **CI/CD (PR CI → Auto Dev → Manual Prod + Rollback)** | **3 pts** | ✅ | Enforced `ci.yml` branch protection + `cd-dev.yml` (`ghcr.io/brut0/sessionboard*`) + owner-approved [`deploy-prod.yml` #42887628791](https://github.com/brut0/sessionboard/actions/runs/42887628791) + verified [`rollback.yml` #42887682401](https://github.com/brut0/sessionboard/actions/runs/42887682401) + [`synthetic-probe.yml` #42887575404](https://github.com/brut0/sessionboard/actions/runs/42887575404) ([`docs/deployment.md`](docs/deployment.md), Issues [`#13`, `#14`](https://github.com/brut0/sessionboard/issues/13)) |
-| **10** | **Observability (Traces + Metrics + Logs, Zero PII)** | **2 pts** | 🚧 *Phase 8 Next (OTLP Ready)* | Grafana Cloud OTLP token & EU stack ready; next: OpenTelemetry instrumentation of `POST /api/sessions` (`booking.create` span, `sessionboard_bookings_total`, JSON logs with shared `trace_id`, `test_telemetry_no_pii.py`) in [`specs/nfr-observability.md`](specs/nfr-observability.md) (Issue [`#15`](https://github.com/brut0/sessionboard/issues/15)) |
+| **10** | **Observability (Traces + Metrics + Logs, Zero PII)** | **2 pts** | 🚧 *Phase 8 (Local Verified — Cloud OTLP Pending)* | OpenTelemetry traces (`booking.create`), Prometheus/Mimir SLIs (`sessionboard_bookings_total`, `sessionboard_booking_duration_seconds`), structured JSON logs with shared `trace_id`, [`test_telemetry_no_pii.py`](backend/tests/integration/test_telemetry_no_pii.py), [`ops/grafana/dashboard.json`](ops/grafana/dashboard.json), and [`docs/observability.md`](docs/observability.md) screenshots verified on `otel-lgtm`; awaiting Render OTLP env toggle (`OTEL_SDK_DISABLED=false`) for live Grafana Cloud verification (Issue [`#15`](https://github.com/brut0/sessionboard/issues/15)) |
 | **11** | **Alerting on User Impact** | **1 pt** | 🔜 *Phase 9* | Grafana alert `BookingErrorRatioHigh` (`error / total > 20%` over 5m when `B >= 3`) on real booking failures, not CPU graphs (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
 | **12** | **On-Call Responder Agent** | **2 pts** | 🔜 *Phase 9* | `oncall.yml` woken via Grafana webhook `repository_dispatch`: opens `[incident]` issue, triggers deterministic rollback, and runs headless **Gemini CLI** to open a regression-tested fix PR (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
 
@@ -288,12 +288,14 @@ sessionboard/
 │   ├── app/
 │   │   ├── domain/                  # Pure scheduling domain (zero SQLAlchemy/FastAPI imports)
 │   │   ├── routers/                 # /api/specialists, /api/clients, /api/rooms, /api/sessions
-│   │   ├── {config,db,models,schemas,seed,telemetry,main}.py
-│   └── tests/                       # Unit + testcontainers PostgreSQL integration + OpenAPI contract (39 tests)
+│   │   └── {config,db,logging_config,models,schemas,seed,telemetry,main}.py
+│   └── tests/                       # Unit + testcontainers PostgreSQL integration + contract + zero-PII tests (43 tests)
 ├── frontend/
 │   ├── src/
 │   │   ├── api/                     # Generated schema.d.ts (openapi-typescript) + openapi-fetch client
 │   │   └── components/              # DayBoard, BookingModal, DirectoryPage + Vitest/RTL/MSW tests (15 tests)
+├── ops/
+│   └── grafana/                     # SessionBoard Booking Observability dashboard (dashboard.json)
 ├── specs/
 │   ├── constitution.md              # Stack locks, architectural invariants & global DoD
 │   ├── product-spec.md              # User stories US-1..US-4, BR-1..BR-9 & 16 ACs
@@ -304,6 +306,8 @@ sessionboard/
 ├── docs/
 │   ├── architecture.md              # Detailed system architecture, sequences & state machine
 │   ├── architecture-explorer.html   # Standalone interactive Archify-style diagram explorer
+│   ├── observability.md             # OTel trace -> log -> metric correlation guide & Grafana screenshots
+│   ├── images/                      # Verified Grafana dashboard & Tempo/Loki trace screenshots
 │   ├── testing.md                   # Multi-layer test strategy & AC-1.1..AC-4.2 traceability matrix
 │   ├── deployment.md                # Environments, expand-contract migrations, CD & rollback runbook
 │   ├── ai-sdlc.md                   # Guide for Chat-native & Companion Web AI SDLC pipelines

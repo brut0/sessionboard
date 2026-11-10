@@ -1,9 +1,10 @@
 """FastAPI router for Session operations (booking, conflicts, listing, status)."""
 
 from datetime import date, time
+from time import perf_counter
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session, selectinload
@@ -26,6 +27,7 @@ from app.schemas import (
     SessionRead,
     SessionStatusUpdate,
 )
+from app.telemetry import get_tracer, record_booking_outcome
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -108,106 +110,171 @@ def list_sessions(
     summary="Book a new session if no conflict exists",
     operation_id="create_session",
 )
-def create_session(payload: SessionCreate, db: DbSession) -> Response:
-    # 1. Parse times and validate domain rules (BR-1, BR-2)
-    start_min = to_minutes(payload.start_time)
-    end_min = end_minutes(start_min, payload.duration_minutes)
+def create_session(request: Request, payload: SessionCreate, db: DbSession) -> Response:
+    started = perf_counter()
+    with get_tracer().start_as_current_span(
+        "booking.create",
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
+        try:
+            # 1. Parse times and validate domain rules (BR-1, BR-2)
+            start_min = to_minutes(payload.start_time)
+            end_min = end_minutes(start_min, payload.duration_minutes)
 
-    try:
-        validate_working_hours(start_min, end_min)
-        validate_granularity_and_duration(start_min, payload.duration_minutes)
-    except ValueError as err:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)
-        ) from err
+            try:
+                validate_working_hours(start_min, end_min)
+                validate_granularity_and_duration(start_min, payload.duration_minutes)
+            except ValueError as err:
+                record_booking_outcome(
+                    result="invalid",
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    duration_seconds=perf_counter() - started,
+                    span=span,
+                    duration_minutes=payload.duration_minutes,
+                    room_id=payload.room_id,
+                    specialist_id=payload.specialist_id,
+                )
+                request.state.booking_telemetry_recorded = True
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)
+                ) from err
 
-    # 2. Acquire Date-Scoped Advisory Lock inside transaction (BR-8)
-    date_str = payload.session_date.isoformat()
-    db.execute(
-        text("SELECT pg_advisory_xact_lock(hashtext(CAST(:date_str AS text)))"),
-        {"date_str": date_str},
-    )
-
-    # 3. Verify referenced specialist, client, room exist (AC-2.4)
-    spec = db.get(Specialist, payload.specialist_id)
-    cl = db.get(Client, payload.client_id)
-    rm = db.get(Room, payload.room_id)
-    if not spec or not cl or not rm:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_found")
-
-    # 4. Query active sessions on this date (BR-5: ignore cancelled)
-    existing_sessions = list(
-        db.scalars(
-            select(SessionModel).filter(
-                SessionModel.session_date == payload.session_date,
-                SessionModel.status != "cancelled",
-                or_(
-                    SessionModel.specialist_id == payload.specialist_id,
-                    SessionModel.room_id == payload.room_id,
-                    SessionModel.client_id == payload.client_id,
-                ),
+            # 2. Acquire Date-Scoped Advisory Lock inside transaction (BR-8)
+            date_str = payload.session_date.isoformat()
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(CAST(:date_str AS text)))"),
+                {"date_str": date_str},
             )
-        ).all()
-    )
 
-    existing_slots = [
-        ExistingSlot(
-            session_id=s.id,
-            start_minutes=to_minutes(_format_time(s.start_time)),
-            duration_minutes=s.duration_minutes,
-            specialist_id=s.specialist_id,
-            client_id=s.client_id,
-            room_id=s.room_id,
-            status=s.status,
-        )
-        for s in existing_sessions
-    ]
+            # 3. Verify referenced specialist, client, room exist (AC-2.4)
+            spec = db.get(Specialist, payload.specialist_id)
+            cl = db.get(Client, payload.client_id)
+            rm = db.get(Room, payload.room_id)
+            if not spec or not cl or not rm:
+                record_booking_outcome(
+                    result="not_found",
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    duration_seconds=perf_counter() - started,
+                    span=span,
+                    duration_minutes=payload.duration_minutes,
+                    room_id=payload.room_id,
+                    specialist_id=payload.specialist_id,
+                )
+                request.state.booking_telemetry_recorded = True
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_found")
 
-    new_slot = NewSlot(
-        start_minutes=start_min,
-        duration_minutes=payload.duration_minutes,
-        specialist_id=payload.specialist_id,
-        client_id=payload.client_id,
-        room_id=payload.room_id,
-    )
+            # 4. Query active sessions on this date (BR-5: ignore cancelled)
+            existing_sessions = list(
+                db.scalars(
+                    select(SessionModel).filter(
+                        SessionModel.session_date == payload.session_date,
+                        SessionModel.status != "cancelled",
+                        or_(
+                            SessionModel.specialist_id == payload.specialist_id,
+                            SessionModel.room_id == payload.room_id,
+                            SessionModel.client_id == payload.client_id,
+                        ),
+                    )
+                ).all()
+            )
 
-    conflicts = find_conflicts(new_slot, existing_slots)
-    if conflicts:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={
-                "detail": "conflict",
-                "conflicts": [
-                    {
-                        "type": c.type,
-                        "session_id": c.conflicting_session_id,
-                        "conflicting_session_id": c.conflicting_session_id,
-                    }
-                    for c in conflicts
-                ],
-            },
-        )
+            existing_slots = [
+                ExistingSlot(
+                    session_id=s.id,
+                    start_minutes=to_minutes(_format_time(s.start_time)),
+                    duration_minutes=s.duration_minutes,
+                    specialist_id=s.specialist_id,
+                    client_id=s.client_id,
+                    room_id=s.room_id,
+                    status=s.status,
+                )
+                for s in existing_sessions
+            ]
 
-    # 5. Persist the new session
-    new_start_time = time(start_min // 60, start_min % 60)
-    session_obj = SessionModel(
-        specialist_id=payload.specialist_id,
-        client_id=payload.client_id,
-        room_id=payload.room_id,
-        session_date=payload.session_date,
-        start_time=new_start_time,
-        duration_minutes=payload.duration_minutes,
-        status="planned",
-    )
-    db.add(session_obj)
-    db.commit()
-    db.refresh(session_obj)
+            new_slot = NewSlot(
+                start_minutes=start_min,
+                duration_minutes=payload.duration_minutes,
+                specialist_id=payload.specialist_id,
+                client_id=payload.client_id,
+                room_id=payload.room_id,
+            )
 
-    response_data = _serialize_session(session_obj, spec.name, cl.display_name, rm.name)
-    return JSONResponse(
-        status_code=status.HTTP_201_CREATED,
-        content=response_data.model_dump(mode="json"),
-    )
+            conflicts = find_conflicts(new_slot, existing_slots)
+            if conflicts:
+                conflict_types = ",".join(sorted({c.type for c in conflicts}))
+                record_booking_outcome(
+                    result="conflict",
+                    status_code=status.HTTP_409_CONFLICT,
+                    duration_seconds=perf_counter() - started,
+                    span=span,
+                    conflict_types=conflict_types,
+                    duration_minutes=payload.duration_minutes,
+                    room_id=payload.room_id,
+                    specialist_id=payload.specialist_id,
+                )
+                request.state.booking_telemetry_recorded = True
+                return JSONResponse(
+                    status_code=status.HTTP_409_CONFLICT,
+                    content={
+                        "detail": "conflict",
+                        "conflicts": [
+                            {
+                                "type": c.type,
+                                "session_id": c.conflicting_session_id,
+                                "conflicting_session_id": c.conflicting_session_id,
+                            }
+                            for c in conflicts
+                        ],
+                    },
+                )
+
+            # 5. Persist the new session
+            new_start_time = time(start_min // 60, start_min % 60)
+            session_obj = SessionModel(
+                specialist_id=payload.specialist_id,
+                client_id=payload.client_id,
+                room_id=payload.room_id,
+                session_date=payload.session_date,
+                start_time=new_start_time,
+                duration_minutes=payload.duration_minutes,
+                status="planned",
+            )
+            db.add(session_obj)
+            db.commit()
+            db.refresh(session_obj)
+
+            response_data = _serialize_session(session_obj, spec.name, cl.display_name, rm.name)
+            record_booking_outcome(
+                result="created",
+                status_code=status.HTTP_201_CREATED,
+                duration_seconds=perf_counter() - started,
+                span=span,
+                conflict_types="",
+                duration_minutes=payload.duration_minutes,
+                room_id=payload.room_id,
+                specialist_id=payload.specialist_id,
+            )
+            request.state.booking_telemetry_recorded = True
+            return JSONResponse(
+                status_code=status.HTTP_201_CREATED,
+                content=response_data.model_dump(mode="json"),
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            record_booking_outcome(
+                result="error",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                duration_seconds=perf_counter() - started,
+                span=span,
+                duration_minutes=payload.duration_minutes,
+                room_id=payload.room_id,
+                specialist_id=payload.specialist_id,
+                error_type=type(exc).__name__,
+            )
+            request.state.booking_telemetry_recorded = True
+            raise
 
 
 @router.patch(

@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +15,14 @@ from app.config import get_settings
 from app.db import check_db_health
 from app.routers import directory, sessions
 from app.schemas import HealthResponse, VersionResponse
-from app.telemetry import TraceIdMiddleware, get_current_trace_id, setup_telemetry
+from app.telemetry import (
+    TraceIdMiddleware,
+    get_current_trace_id,
+    get_tracer,
+    record_booking_outcome,
+    setup_telemetry,
+    shutdown_telemetry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +33,10 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
     setup_telemetry(app, settings)
-    yield
+    try:
+        yield
+    finally:
+        shutdown_telemetry()
 
 
 app = FastAPI(
@@ -50,11 +62,58 @@ app.include_router(directory.router)
 app.include_router(sessions.router)
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> Response:
+    """Capture invalid outcome on POST /api/sessions schema validation failures."""
+    if request.url.path == "/api/sessions" and request.method.upper() == "POST":
+        with get_tracer().start_as_current_span(
+            "booking.create",
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            record_booking_outcome(
+                result="invalid",
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                duration_seconds=0.0,
+                span=span,
+            )
+    return await request_validation_exception_handler(request, exc)
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Zero-PII global error handler capturing trace ID."""
     trace_id = getattr(request.state, "trace_id", get_current_trace_id())
-    logger.exception("Unhandled server exception: %s [trace_id=%s]", type(exc).__name__, trace_id)
+    span_id = getattr(request.state, "span_id", "0" * 16)
+    error_type = type(exc).__name__
+
+    if (
+        request.url.path == "/api/sessions"
+        and request.method.upper() == "POST"
+        and not getattr(request.state, "booking_telemetry_recorded", False)
+    ):
+        record_booking_outcome(
+            result="error",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            duration_seconds=0.0,
+            error_type=error_type,
+            trace_id_override=trace_id,
+            span_id_override=span_id,
+        )
+    else:
+        logger.error(
+            "Unhandled server exception: %s",
+            error_type,
+            extra={
+                "event": "request.unhandled_error",
+                "env": settings.app_env,
+                "http.route": request.url.path,
+                "http.status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "error.type": error_type,
+                "trace_id": trace_id,
+                "span_id": span_id,
+            },
+        )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "internal_error", "trace_id": trace_id},
