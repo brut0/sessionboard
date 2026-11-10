@@ -81,7 +81,7 @@
             </button>
           </div>
           <span id="login-help" class="hint">
-            Minimum 12 characters (`SDLC_OWNER_PASSWORD`). Cookie is signed and HttpOnly.
+            Minimum 12 characters (<code>SDLC_OWNER_PASSWORD</code>). Cookie is signed and HttpOnly.
           </span>
         </div>
 
@@ -408,8 +408,9 @@
         <button type="submit" formmethod="dialog" formnovalidate class="btn btn-ghost">Close</button>
       </div>
       <p class="hint">
-        Keys entered here are stored exclusively in git-ignored <code>.local/ai-sdlc/config.json</code>
-        and are never committed or returned raw in API responses.
+        Keys entered here are stored exclusively in the host's private state file
+        (<code>SDLC_STATE_DIR/config.json</code>, defaulting to git-ignored
+        <code>.local/ai-sdlc/config.json</code>) and are never committed or returned raw in API responses.
       </p>
 
       <div class="field">

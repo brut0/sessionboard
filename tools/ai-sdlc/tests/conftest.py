@@ -16,6 +16,7 @@ def isolate_sdlc_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APP_ENV", "local")
     for var in (
         "RENDER",
+        "SDLC_APP_VERSION",
         "SDLC_REQUIRE_AUTH",
         "SDLC_OWNER_PASSWORD",
         "SDLC_SESSION_SECRET",

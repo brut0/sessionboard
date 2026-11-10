@@ -37,6 +37,7 @@ class WorkbenchSettings(BaseSettings):
     )
 
     repo_root: Path = Field(default_factory=detect_repo_root, alias="SDLC_REPO_ROOT")
+    app_version: str = Field(default="local", alias="SDLC_APP_VERSION")
     app_env: str = Field(default="local", alias="APP_ENV")
     render_env: str = Field(default="", alias="RENDER")
     require_auth: bool = Field(default=False, alias="SDLC_REQUIRE_AUTH")

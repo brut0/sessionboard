@@ -30,9 +30,11 @@ GateName = Literal[
 
 class HealthResponse(BaseModel):
     status: str
+    version: str = "local"
     auth_required: bool = False
     auth_configured: bool = True
     authenticated: bool = True
+    workspace_ready: bool = True
     repo_root: str | None = None
     git_branch: str | None = None
     gh_authenticated: bool | None = None

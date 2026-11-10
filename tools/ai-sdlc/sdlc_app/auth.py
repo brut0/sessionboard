@@ -83,12 +83,13 @@ def is_https_request(request: Request) -> bool:
 
 
 def extract_client_ip(request: Request) -> str:
-    """Determine client IP safely without letting non-proxied headers bypass limits."""
+    """Determine client IP safely using Render's rightmost proxy hop when behind proxy."""
     host = request.client.host if request.client else "unknown"
     if os.environ.get("RENDER", "").strip().lower() in {"1", "true", "yes"}:
         forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded.strip():
-            return forwarded.split(",")[0].strip()
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        if hops:
+            return hops[-1]
     return host
 
 
@@ -115,7 +116,7 @@ def is_request_authenticated(request: Request, settings: WorkbenchSettings) -> b
 
 
 class LoginRateLimiter:
-    """In-memory sliding-window brute-force limiter for owner login attempts."""
+    """Bounded in-memory sliding-window brute-force limiter for owner login attempts."""
 
     def __init__(
         self,
@@ -124,11 +125,13 @@ class LoginRateLimiter:
         window_seconds: float = 60.0,
         lockout_seconds: float = 60.0,
         global_max_failures: int = 30,
+        max_tracked_ips: int = 1024,
     ) -> None:
         self.max_failures = max_failures
         self.window_seconds = window_seconds
         self.lockout_seconds = lockout_seconds
         self.global_max_failures = global_max_failures
+        self.max_tracked_ips = max_tracked_ips
         self._lock = Lock()
         self._failures: dict[str, deque[float]] = {}
         self._locked_until: dict[str, float] = {}
@@ -140,9 +143,25 @@ class LoginRateLimiter:
         while bucket and bucket[0] < cutoff:
             bucket.popleft()
 
+    def _gc_stale(self, now: float) -> None:
+        for ip in list(self._failures):
+            bucket = self._failures[ip]
+            self._prune(bucket, now)
+            if not bucket and self._locked_until.get(ip, 0.0) <= now:
+                self._failures.pop(ip, None)
+                self._locked_until.pop(ip, None)
+        for ip in list(self._locked_until):
+            if self._locked_until[ip] <= now:
+                self._locked_until.pop(ip, None)
+        while len(self._failures) > self.max_tracked_ips:
+            oldest_ip = next(iter(self._failures))
+            self._failures.pop(oldest_ip, None)
+            self._locked_until.pop(oldest_ip, None)
+
     def check_locked(self, client_key: str) -> int | None:
         now = time.monotonic()
         with self._lock:
+            self._gc_stale(now)
             if self._global_locked_until > now:
                 return max(1, int(self._global_locked_until - now))
             until = self._locked_until.get(client_key, 0.0)
@@ -153,6 +172,7 @@ class LoginRateLimiter:
     def record_failure(self, client_key: str) -> None:
         now = time.monotonic()
         with self._lock:
+            self._gc_stale(now)
             bucket = self._failures.setdefault(client_key, deque())
             self._prune(bucket, now)
             bucket.append(now)

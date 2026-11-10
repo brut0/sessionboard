@@ -114,8 +114,9 @@ def create_app(
     llm_factory: Callable[[WorkbenchSettings], Any] | None = None,
 ) -> FastAPI:
     active_settings = (settings or get_settings()).load_persisted_overrides()
+    bootstrap_status: dict[str, object] = {"ok": True, "action": "skipped"}
     if active_settings.clone_repo_url.strip():
-        bootstrap_workspace(
+        bootstrap_status = bootstrap_workspace(
             active_settings.repo_root,
             clone_repo_url=active_settings.clone_repo_url,
             gh_token=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", ""),
@@ -249,20 +250,32 @@ def create_app(
     def health(request: Request) -> HealthResponse:
         cfg = state["settings"]
         authed = is_request_authenticated(request, cfg)
+        workspace_ready = bool(bootstrap_status.get("ok", True))
+        if not workspace_ready:
+            overall_status = "degraded"
+        elif cfg.auth_required and not cfg.auth_configured:
+            overall_status = "unconfigured"
+        else:
+            overall_status = "ok"
+
         if cfg.auth_required and not authed:
             return HealthResponse(
-                status="ok" if cfg.auth_configured else "unconfigured",
+                status=overall_status,
+                version=cfg.app_version,
                 auth_required=True,
                 auth_configured=cfg.auth_configured,
                 authenticated=False,
+                workspace_ready=workspace_ready,
             )
 
         git_info = get_git_overview(cfg.repo_root)
         return HealthResponse(
-            status="ok",
+            status=overall_status,
+            version=cfg.app_version,
             auth_required=cfg.auth_required,
             auth_configured=cfg.auth_configured,
             authenticated=True,
+            workspace_ready=workspace_ready,
             repo_root=str(cfg.repo_root),
             git_branch=str(git_info["branch"]),
             gh_authenticated=bool(git_info["gh_authenticated"]),

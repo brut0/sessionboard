@@ -83,7 +83,15 @@ def test_owner_login_cookie_lifecycle_and_fail_closed_routes(tmp_path: Path) -> 
     client = TestClient(create_app(settings=settings))
 
     # 1. Unauthenticated API & OpenAPI docs are blocked with 401
-    for path in ("/api/config", "/api/runs", "/api/stages", "/api/git-status", "/openapi.json"):
+    for path in (
+        "/api/config",
+        "/api/runs",
+        "/api/stages",
+        "/api/git-status",
+        "/openapi.json",
+        "/docs",
+        "/redoc",
+    ):
         resp = client.get(path)
         assert resp.status_code == 401, f"Expected 401 on {path}, got {resp.status_code}"
 
@@ -251,3 +259,54 @@ def test_sanitize_secrets_and_workspace_bootstrap_never_leaks_tokens(tmp_path: P
     assert (target_ws / "AGENTS.md").is_file()
     git_cfg = (target_ws / ".git" / "config").read_text(encoding="utf-8")
     assert "ghp_" not in git_cfg
+
+    # Verify create_app() runs bootstrap_workspace end-to-end and surfaces failures as degraded
+    boot_ws = tmp_path / "app_boot_ws"
+    app_ok = create_app(
+        settings=WorkbenchSettings(
+            repo_root=boot_ws,
+            clone_repo_url=str(bare_origin),
+            app_version="abc1234",
+        )
+    )
+    ok_client = TestClient(app_ok)
+    h_ok = ok_client.get("/api/health").json()
+    assert h_ok["status"] == "ok"
+    assert h_ok["workspace_ready"] is True
+    assert h_ok["version"] == "abc1234"
+    assert (boot_ws / "AGENTS.md").is_file()
+
+    degraded_app = create_app(
+        settings=WorkbenchSettings(
+            repo_root=tmp_path / "degraded_ws",
+            clone_repo_url="https://ghp_secret@github.com/brut0/sessionboard.git",
+        )
+    )
+    h_deg = TestClient(degraded_app).get("/api/health").json()
+    assert h_deg["status"] == "degraded"
+    assert h_deg["workspace_ready"] is False
+
+
+def test_render_proxy_xff_spoof_uses_rightmost_hop(tmp_path: Path, monkeypatch) -> None:
+    _seed_mini_repo(tmp_path)
+    monkeypatch.setenv("RENDER", "true")
+    secret_pw = "render-xff-owner-pass-2026"
+    client = TestClient(
+        create_app(settings=WorkbenchSettings(repo_root=tmp_path, owner_password=secret_pw))
+    )
+
+    # Spoof leftmost XFF entries per attempt while the rightmost proxy hop stays constant
+    for idx in range(5):
+        res = client.post(
+            "/api/auth/login",
+            json={"password": "wrong-password-guess"},
+            headers={"X-Forwarded-For": f"10.0.0.{idx}, 203.0.113.50"},
+        )
+        assert res.status_code == 401
+
+    blocked = client.post(
+        "/api/auth/login",
+        json={"password": secret_pw},
+        headers={"X-Forwarded-For": "198.51.100.99, 203.0.113.50"},
+    )
+    assert blocked.status_code == 429

@@ -35,8 +35,10 @@ RUN useradd --create-home --shell /bin/bash sdlc && \
     mkdir -p /app/workspace /app/state && \
     chown -R sdlc:sdlc /app/workbench /app/workspace /app/state
 
+ARG GIT_SHA=local
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/workbench/.venv/bin:$PATH" \
+    SDLC_APP_VERSION=$GIT_SHA \
     APP_ENV=prod \
     SDLC_REQUIRE_AUTH=true \
     SDLC_NON_INTERACTIVE=true \

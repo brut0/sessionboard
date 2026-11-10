@@ -136,6 +136,8 @@ jobs:
           tags: |
             ghcr.io/${{ steps.owner.outputs.owner }}/sessionboard-ai-sdlc:${{ github.sha }}
             ghcr.io/${{ steps.owner.outputs.owner }}/sessionboard-ai-sdlc:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
 
   deploy-ai-sdlc:
     name: Deploy Companion AI SDLC Workbench
@@ -160,12 +162,13 @@ jobs:
           curl -fsS -X POST "${HOOK}&imgURL=${ENCODED_IMG}"
           echo "skipped=false" >> $GITHUB_OUTPUT
 
-      - name: Verify AI SDLC health & fail-closed owner gate
+      - name: Verify AI SDLC version & fail-closed owner gate
         if: steps.deploy.outputs.skipped != 'true' && vars.AI_SDLC_URL != ''
         env:
           AI_SDLC_URL: ${{ vars.AI_SDLC_URL }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
-          echo "Waiting for $AI_SDLC_URL/api/health..."
+          echo "Polling $AI_SDLC_URL/api/health for SHA $EXPECTED_SHA..."
           START_TIME=$(date +%s)
           TIMEOUT=600
           while true; do
@@ -175,8 +178,10 @@ jobs:
               echo "Timeout waiting for AI SDLC workbench."
               exit 1
             fi
-            if curl -fsS "$AI_SDLC_URL/api/health" >/dev/null 2>&1; then
-              echo "Health check succeeded."
+            VERSION=$(curl -s "$AI_SDLC_URL/api/health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)
+            echo "Current version on ai-sdlc: $VERSION (waiting for $EXPECTED_SHA)"
+            if [ "$VERSION" = "$EXPECTED_SHA" ]; then
+              echo "AI SDLC deployment SHA verified!"
               break
             fi
             sleep 15
