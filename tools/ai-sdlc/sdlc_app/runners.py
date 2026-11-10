@@ -299,4 +299,6 @@ def run_gemini_cli_headless(
         timeout=300,
         extra_env=extra_env,
     )
+    if api_key.strip():
+        out = out.replace(api_key.strip(), "<redacted-key>")
     return code, out

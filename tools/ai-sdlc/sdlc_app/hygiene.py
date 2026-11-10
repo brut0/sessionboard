@@ -8,20 +8,20 @@ from pathlib import Path
 
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
 
-FORBIDDEN_PATH_PREFIXES = (
+FORBIDDEN_SEGMENTS = {
     ".git",
     ".local",
     ".venv",
     ".pytest_cache",
-    "tools/ai-sdlc/.venv",
+    ".ruff_cache",
+    ".mypy_cache",
     "node_modules",
+}
+
+FORBIDDEN_PATH_PREFIXES = (
     "backend/app/static",
     "frontend/dist",
 )
-
-FORBIDDEN_EXACT_NAMES = {
-    ".env",
-}
 
 
 class HygieneViolationError(ValueError):
@@ -40,11 +40,14 @@ def validate_patch_target(repo_root: Path, rel_path: str) -> Path:
     if ".." in candidate.parts:
         raise HygieneViolationError(f"Path traversal ('..') is forbidden: {cleaned}")
 
-    first_part = candidate.parts[0] if candidate.parts else ""
-    if first_part in FORBIDDEN_EXACT_NAMES or first_part.startswith(".env."):
-        raise HygieneViolationError(f"Protected dotfile cannot be modified: {cleaned}")
+    for part in candidate.parts:
+        low_part = part.lower()
+        if low_part in FORBIDDEN_SEGMENTS:
+            raise HygieneViolationError(f"Protected directory cannot be modified: {cleaned}")
+        if low_part == ".env" or low_part.startswith(".env."):
+            raise HygieneViolationError(f"Protected dotfile cannot be modified: {cleaned}")
 
-    normalized = candidate.as_posix()
+    normalized = candidate.as_posix().lower()
     for prefix in FORBIDDEN_PATH_PREFIXES:
         if normalized == prefix or normalized.startswith(f"{prefix}/"):
             raise HygieneViolationError(f"Protected directory cannot be modified: {cleaned}")

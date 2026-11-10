@@ -138,7 +138,7 @@ def apply_patches_to_repo(
             for p in custom_patches
         ]
     else:
-        wanted = set(paths) if paths else None
+        wanted = set(paths) if paths is not None else None
         for p in run.pending_patches:
             if wanted is None or p.path in wanted:
                 to_apply.append(p)

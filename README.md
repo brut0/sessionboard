@@ -243,7 +243,7 @@ sessionboard/
 │   ├── adr/0001..0003-*.md          # Architecture Decision Records
 │   └── plan/{MASTER_PLAN,EXECUTION_GUIDE,PRE_PHASE_8_HUMAN_CHECKLIST}.md
 ├── tools/
-│   └── ai-sdlc/                     # Decoupled Companion AI SDLC Web Workbench (:8090 + 23 tests)
+│   └── ai-sdlc/                     # Decoupled Companion AI SDLC Web Workbench (:8090 + 33 tests)
 ├── .agents/
 │   ├── roles/*.md                   # System prompts for all 8 agent roles
 │   └── skills/*/SKILL.md            # issue-workflow, phase-gate, release-and-rollback, feature-sdlc

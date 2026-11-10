@@ -99,3 +99,17 @@ def test_llm_error_sanitizes_api_key_if_echoed_upstream() -> None:
 
     assert secret not in str(exc_info.value)
     assert "401" in str(exc_info.value)
+
+
+def test_llm_error_handles_non_json_200_response() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html>bad gateway proxy</html>")
+
+    client = LLMClient(
+        provider="gemini",
+        model="gemini-2.5-flash",
+        api_key="AIzaTestKey123456",
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(LLMError, match="invalid JSON"):
+        client.complete(system_prompt="sys", user_prompt="usr")

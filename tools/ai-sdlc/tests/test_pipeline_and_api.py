@@ -144,14 +144,23 @@ def test_sdd_pipeline_enforces_spec_approval_before_architect_and_tdd_patch_appl
     assert intake.status_code == 200
     assert intake.json()["intake"]["in_scope"] is True
 
-    # 3. Spec-First Gate: Architect MUST fail with 409 before spec is approved
-    blocked_arch = client.post(f"/api/runs/{run_id}/stages/architect", json={"guidance": ""})
-    assert blocked_arch.status_code == 409
+    # 3. Spec-First Gate: Architect / TDD / Implement MUST fail with 409 before spec is approved
+    for blocked_stage in ("architect", "tdd_tests", "implement"):
+        blocked_resp = client.post(
+            f"/api/runs/{run_id}/stages/{blocked_stage}",
+            json={"guidance": ""},
+        )
+        assert blocked_resp.status_code == 409
 
-    # 4. Run Spec Stage & Apply patch
+    # 4. Run Spec Stage & Apply nothing when paths=[] is passed
     spec_res = client.post(f"/api/runs/{run_id}/stages/spec", json={"guidance": "Max 280 chars"})
     assert spec_res.status_code == 200
     assert len(spec_res.json()["pending_patches"]) == 1
+
+    apply_empty = client.post(f"/api/runs/{run_id}/apply", json={"paths": []})
+    assert apply_empty.status_code == 200
+    assert apply_empty.json()["applied_paths"] == []
+    assert "AC-2.9" not in (tmp_path / "specs" / "product-spec.md").read_text()
 
     apply_spec = client.post(
         f"/api/runs/{run_id}/apply",

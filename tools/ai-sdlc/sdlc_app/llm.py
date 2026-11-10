@@ -122,7 +122,10 @@ class LLMClient:
         if resp.status_code >= 400:
             raise LLMError(self._sanitize(f"Gemini HTTP {resp.status_code}: {resp.text[:500]}"))
 
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise LLMError(self._sanitize(f"Gemini returned invalid JSON: {exc}")) from exc
         candidates = data.get("candidates") or []
         if not candidates:
             raise LLMError("Gemini response contained no candidates.")
@@ -153,7 +156,10 @@ class LLMClient:
         if resp.status_code >= 400:
             raise LLMError(self._sanitize(f"LLM HTTP {resp.status_code}: {resp.text[:500]}"))
 
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise LLMError(self._sanitize(f"LLM returned invalid JSON: {exc}")) from exc
         choices = data.get("choices") or []
         if not choices:
             raise LLMError("LLM response contained no choices.")
