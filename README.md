@@ -40,9 +40,9 @@ This table guides peer reviewers directly to the evidence for every grading crit
 | **5** | **Application (Full-Stack + DB)** | **2 pts** | ✅ | React 19 SPA (`DayBoard`, `BookingModal`, `DirectoryPage`) ↔ FastAPI REST API ↔ PostgreSQL 16 with `pg_advisory_xact_lock` (Issues [`#2`–`#11`](https://github.com/brut0/sessionboard/issues), PRs `#18`–`#27`) |
 | **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **54 core app tests passing** (39 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract tests, 15 frontend Vitest/RTL/MSW tests) + **39 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`](https://github.com/brut0/sessionboard/issues)) |
 | **7** | **Containerization** | **2 pts** | ✅ | Multi-stage [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) (`db` + `app` + `otel-lgtm`) + companion [`tools/ai-sdlc/Dockerfile`](tools/ai-sdlc/Dockerfile) (`--profile sdlc`, Issue [`#2`](https://github.com/brut0/sessionboard/issues/2), PR `#18`) |
-| **8** | **Deployment** | **2 pts** | 🚧 *Phase 7 (Human Setup)* | Deployment workflows & GHCR image built (PR `#31`); awaiting human Render Free + Neon PostgreSQL 16 setup and live verification per [`docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md`](docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md) (Issue [`#14`](https://github.com/brut0/sessionboard/issues/14)) |
-| **9** | **CI/CD (PR CI → Auto Dev → Manual Prod + Rollback)** | **3 pts** | ✅ CI / 🚧 CD | `ci.yml` live & enforced by branch protection (`Repository Hygiene`, `Backend Lint & Tests`, `Frontend Lint & Tests`, `Docker Build`); `cd-dev.yml`, `deploy-prod.yml`, `rollback.yml`, and `synthetic-probe.yml` merged in PR `#31` ([`docs/deployment.md`](docs/deployment.md), Issues [`#13`, `#14`](https://github.com/brut0/sessionboard/issues/13)) |
-| **10** | **Observability (Traces + Metrics + Logs, Zero PII)** | **2 pts** | 🔜 *Phase 8* | OpenTelemetry instrumentation of `POST /api/sessions` (`booking.create` span, `sessionboard_bookings_total`, JSON logs with shared `trace_id`, `test_telemetry_no_pii.py`) in [`specs/nfr-observability.md`](specs/nfr-observability.md) (Issue [`#15`](https://github.com/brut0/sessionboard/issues/15)) |
+| **8** | **Deployment** | **2 pts** | ✅ | Live on Render Free + isolated Neon PostgreSQL 16 DBs: [`sessionboard-dev`](https://sessionboard-dev.onrender.com), [`sessionboard-prod`](https://sessionboard-prod.onrender.com), and owner-gated companion [`essionboard-ai-sdlc`](https://essionboard-ai-sdlc.onrender.com) (`401` unauthenticated); see [`docs/deployment.md` §7](docs/deployment.md#7-live-verification--rollback-evidence-phase-7-gate) (Issue [`#14`](https://github.com/brut0/sessionboard/issues/14)) |
+| **9** | **CI/CD (PR CI → Auto Dev → Manual Prod + Rollback)** | **3 pts** | ✅ | Enforced `ci.yml` branch protection + `cd-dev.yml` (`ghcr.io/brut0/sessionboard*`) + owner-approved [`deploy-prod.yml` #42887628791](https://github.com/brut0/sessionboard/actions/runs/42887628791) + verified [`rollback.yml` #42887682401](https://github.com/brut0/sessionboard/actions/runs/42887682401) + [`synthetic-probe.yml` #42887575404](https://github.com/brut0/sessionboard/actions/runs/42887575404) ([`docs/deployment.md`](docs/deployment.md), Issues [`#13`, `#14`](https://github.com/brut0/sessionboard/issues/13)) |
+| **10** | **Observability (Traces + Metrics + Logs, Zero PII)** | **2 pts** | 🚧 *Phase 8 Next (OTLP Ready)* | Grafana Cloud OTLP token & EU stack ready; next: OpenTelemetry instrumentation of `POST /api/sessions` (`booking.create` span, `sessionboard_bookings_total`, JSON logs with shared `trace_id`, `test_telemetry_no_pii.py`) in [`specs/nfr-observability.md`](specs/nfr-observability.md) (Issue [`#15`](https://github.com/brut0/sessionboard/issues/15)) |
 | **11** | **Alerting on User Impact** | **1 pt** | 🔜 *Phase 9* | Grafana alert `BookingErrorRatioHigh` (`error / total > 20%` over 5m when `B >= 3`) on real booking failures, not CPU graphs (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
 | **12** | **On-Call Responder Agent** | **2 pts** | 🔜 *Phase 9* | `oncall.yml` woken via Grafana webhook `repository_dispatch`: opens `[incident]` issue, triggers deterministic rollback, and runs headless **Gemini CLI** to open a regression-tested fix PR (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
 
@@ -239,7 +239,14 @@ Best when you want an independent browser control plane running side-by-side nex
 
 ---
 
-## ⚡ 4. Quick Start & Commands
+## ⚡ 4. Quick Start & Live Environments
+
+| Environment | URL / Command | Access & Notes |
+|---|---|---|
+| **Live Production (`prod`)** | https://sessionboard-prod.onrender.com | Public studio scheduler backed by Neon `sessionboard-prod` (promoted via manual approval) |
+| **Live Staging (`dev`)** | https://sessionboard-dev.onrender.com | Auto-deployed on `main` pushes (`cd-dev.yml`); Neon `sessionboard-dev` + hourly synthetic probe |
+| **Companion AI SDLC Workbench** | https://essionboard-ai-sdlc.onrender.com | Strictly owner-only (`SDLC_REQUIRE_AUTH=true`, `401` unauthenticated `/api/*`) |
+| **Local Full Stack** | `docker compose up --build` | App at `http://localhost:8000` + Grafana at `http://localhost:3000` (add `--profile sdlc` for `:8090`) |
 
 ```bash
 # 1. Start the full stack locally (PostgreSQL 16 + SessionBoard App + Grafana OTel-LGTM)
