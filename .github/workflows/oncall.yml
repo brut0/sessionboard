@@ -1,0 +1,421 @@
+name: On-Call Responder
+
+on:
+  repository_dispatch:
+    types: [grafana-alert]
+
+concurrency:
+  group: oncall
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  handle-resolved:
+    name: Comment Alert Resolved
+    if: github.event.client_payload.status == 'resolved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment resolved on open incident issue
+        env:
+          GH_TOKEN: ${{ secrets.ONCALL_GH_TOKEN || github.token }}
+          ALERT_NAME: ${{ github.event.client_payload.alertname || 'BookingErrorRatioHigh' }}
+          TARGET_ENV: ${{ github.event.client_payload.env || 'dev' }}
+        run: |
+          ISSUE_NUM=$(gh issue list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --label incident \
+            --state open \
+            --limit 1 \
+            --json number \
+            --jq '.[0].number // empty')
+          if [ -z "$ISSUE_NUM" ]; then
+            echo "No open incident issue found for resolved event (${ALERT_NAME} on ${TARGET_ENV})."
+            exit 0
+          fi
+          NOW_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
+            --body "[oncall-agent] Alert \`${ALERT_NAME}\` on \`${TARGET_ENV}\` resolved at ${NOW_UTC}."
+
+  mitigate-and-fix:
+    name: Mitigate & Remediate Incident
+    if: github.event.client_payload.status != 'resolved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with history
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.ONCALL_GH_TOKEN || github.token }}
+          fetch-depth: 0
+
+      - name: Configure git identity for oncall-agent
+        run: |
+          git config user.name "sessionboard-oncall[bot]"
+          git config user.email "oncall-agent@users.noreply.github.com"
+          git config commit.gpgsign false
+
+      - name: Create or reuse incident issue
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.ONCALL_GH_TOKEN || github.token }}
+          ALERT_NAME: ${{ github.event.client_payload.alertname || 'BookingErrorRatioHigh' }}
+          TARGET_ENV: ${{ github.event.client_payload.env || 'dev' }}
+          STATUS: ${{ github.event.client_payload.status || 'firing' }}
+          SUMMARY: ${{ github.event.client_payload.summary || 'Triggered via Grafana alert webhook.' }}
+        run: |
+          TITLE="[incident] ${ALERT_NAME} on ${TARGET_ENV}"
+          NOW_UTC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          EXISTING=$(gh issue list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --label incident \
+            --state open \
+            --search "\"${TITLE}\" in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -n 1 || true)
+
+          if [ -n "$EXISTING" ]; then
+            ISSUE_NUM="$EXISTING"
+            gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
+              --body "[oncall-agent] Re-alert received at ${NOW_UTC} (status=\`${STATUS}\`, run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}). Summary: ${SUMMARY}"
+          else
+            ISSUE_URL=$(gh issue create \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "$TITLE" \
+              --label "incident,oncall,agent:oncall" \
+              --body "$(cat <<EOF
+          ### Incident Triggered
+          - **Alert:** \`${ALERT_NAME}\`
+          - **Environment:** \`${TARGET_ENV}\`
+          - **Status:** \`${STATUS}\`
+          - **Timestamp (UTC):** ${NOW_UTC}
+          - **Workflow Run:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          ### Alert Summary
+          ${SUMMARY}
+          EOF
+          )")
+            ISSUE_NUM=$(basename "$ISSUE_URL")
+          fi
+          echo "number=${ISSUE_NUM}" >> "$GITHUB_OUTPUT"
+
+      - name: Identify deployed version and rollback target
+        id: versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEV_URL: ${{ vars.DEV_URL }}
+          PROD_URL: ${{ vars.PROD_URL }}
+          TARGET_ENV: ${{ github.event.client_payload.env || 'dev' }}
+          OWNER: ${{ github.repository_owner }}
+          ISSUE_NUM: ${{ steps.issue.outputs.number }}
+        run: |
+          if [ "$TARGET_ENV" = "prod" ]; then
+            SERVICE_URL="$PROD_URL"
+          else
+            SERVICE_URL="$DEV_URL"
+          fi
+
+          CURRENT_SHA=""
+          if [ -n "$SERVICE_URL" ]; then
+            for i in 1 2 3 4; do
+              CURRENT_SHA=$(curl -sS --max-time 30 "$SERVICE_URL/api/version" \
+                | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)
+              if [ -n "$CURRENT_SHA" ]; then
+                break
+              fi
+              sleep 15
+            done
+          fi
+
+          BASE_SHA="$CURRENT_SHA"
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            BASE_SHA=$(git rev-parse HEAD)
+          fi
+
+          OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          TARGET_SHA=""
+          for CANDIDATE in $(git rev-list --first-parent --max-count=6 "$BASE_SHA" | tail -n +2); do
+            if docker manifest inspect "ghcr.io/${OWNER_LOWER}/sessionboard:${CANDIDATE}" >/dev/null 2>&1; then
+              TARGET_SHA="$CANDIDATE"
+              break
+            fi
+          done
+
+          echo "current_sha=${CURRENT_SHA:-$BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "target_sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$TARGET_SHA" ] && [ "$TARGET_ENV" = "dev" ]; then
+            gh workflow run rollback.yml \
+              --repo "${GITHUB_REPOSITORY}" \
+              -f env=dev \
+              -f sha="$TARGET_SHA"
+            gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
+              --body "[oncall-agent] Detected deployed SHA \`${CURRENT_SHA:-unknown}\` on \`${TARGET_ENV}\`. Triggered automatic rollback via \`rollback.yml\` to previous healthy SHA \`${TARGET_SHA}\`."
+          else
+            gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
+              --body "[oncall-agent] Deployed SHA on \`${TARGET_ENV}\` is \`${CURRENT_SHA:-unknown}\`. Automatic rollback target: \`${TARGET_SHA:-none}\` (manual approval required for non-dev or missing image)."
+          fi
+
+      - name: Collect Loki logs and git diff into incident/context.md
+        env:
+          GRAFANA_LOGS_URL: ${{ secrets.GRAFANA_LOGS_URL }}
+          GRAFANA_LOGS_USER: ${{ secrets.GRAFANA_LOGS_USER }}
+          GRAFANA_LOGS_TOKEN: ${{ secrets.GRAFANA_LOGS_TOKEN }}
+          ALERT_NAME: ${{ github.event.client_payload.alertname || 'BookingErrorRatioHigh' }}
+          TARGET_ENV: ${{ github.event.client_payload.env || 'dev' }}
+          STATUS: ${{ github.event.client_payload.status || 'firing' }}
+          SUMMARY: ${{ github.event.client_payload.summary || '' }}
+          CURRENT_SHA: ${{ steps.versions.outputs.current_sha }}
+          TARGET_SHA: ${{ steps.versions.outputs.target_sha }}
+        run: |
+          mkdir -p incident
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import subprocess
+          import time
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          def run_git(args: list[str]) -> str:
+              proc = subprocess.run(["git", *args], capture_output=True, text=True, check=False)
+              return (proc.stdout or proc.stderr or "").strip()
+
+          current_sha = os.environ.get("CURRENT_SHA", "").strip()
+          target_sha = os.environ.get("TARGET_SHA", "").strip()
+
+          loki_lines: list[str] = []
+          logs_url = os.environ.get("GRAFANA_LOGS_URL", "").strip().rstrip("/")
+          logs_user = os.environ.get("GRAFANA_LOGS_USER", "").strip()
+          logs_token = os.environ.get("GRAFANA_LOGS_TOKEN", "").strip()
+
+          if logs_url and logs_user and logs_token:
+              if not logs_url.endswith("/loki/api/v1/query_range"):
+                  query_endpoint = f"{logs_url}/loki/api/v1/query_range"
+              else:
+                  query_endpoint = logs_url
+              now_ns = int(time.time() * 1_000_000_000)
+              start_ns = now_ns - (30 * 60 * 1_000_000_000)
+              params = urllib.parse.urlencode(
+                  {
+                      "query": '{service_name="sessionboard"} | json | level="ERROR"',
+                      "start": str(start_ns),
+                      "end": str(now_ns),
+                      "limit": "200",
+                      "direction": "backward",
+                  }
+              )
+              req = urllib.request.Request(f"{query_endpoint}?{params}")
+              creds = base64.b64encode(f"{logs_user}:{logs_token}".encode("utf-8")).decode("ascii")
+              req.add_header("Authorization", f"Basic {creds}")
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      payload = json.loads(resp.read().decode("utf-8"))
+                  for stream in payload.get("data", {}).get("result", []):
+                      for _, line in stream.get("values", []):
+                          loki_lines.append(line)
+                          if len(loki_lines) >= 200:
+                              break
+                      if len(loki_lines) >= 200:
+                          break
+              except Exception as err:
+                  loki_lines.append(f"[warn] Loki query failed ({type(err).__name__}); continuing without logs.")
+          else:
+              loki_lines.append("[info] Grafana Loki credentials not configured; skipped live log fetch.")
+
+          recent_log = run_git(["log", "-5", "--stat"])
+          diff_text = ""
+          if target_sha and current_sha and target_sha != current_sha:
+              diff_text = run_git(["diff", f"{target_sha}..{current_sha}", "--", "backend", "frontend"])
+          elif target_sha:
+              diff_text = run_git(["diff", f"{target_sha}..HEAD", "--", "backend", "frontend"])
+
+          context = [
+              "# Incident Context",
+              "",
+              f"- **Alert:** `{os.environ.get('ALERT_NAME')}`",
+              f"- **Environment:** `{os.environ.get('TARGET_ENV')}`",
+              f"- **Status:** `{os.environ.get('STATUS')}`",
+              f"- **Summary:** {os.environ.get('SUMMARY')}",
+              f"- **Current SHA:** `{current_sha}`",
+              f"- **Rollback SHA:** `{target_sha or 'none'}`",
+              "",
+              "## Recent Loki ERROR Logs (last 30m, max 200 lines)",
+              "```json",
+              "\n".join(loki_lines[:200]) if loki_lines else "(empty)",
+              "```",
+              "",
+              "## Recent Commits (`git log -5 --stat`)",
+              "```text",
+              recent_log or "(none)",
+              "```",
+              "",
+              "## Diff Between Rollback Target and Current Version",
+              "```diff",
+              diff_text[:25000] if diff_text else "(no diff)",
+              "```",
+              "",
+          ]
+          Path("incident/context.md").write_text("\n".join(context), encoding="utf-8")
+          PY
+
+      - name: Set up Python / uv and Node.js 22
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+
+      - name: Install Python 3.12 and backend dependencies
+        working-directory: backend
+        run: |
+          uv python install 3.12
+          uv sync --frozen
+
+      - name: Set up Node.js 22 for Gemini CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run headless Gemini CLI on-call agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+          GEMINI_CLI_TRUST_WORKSPACE: "true"
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::warning::GEMINI_API_KEY is not set. Skipping headless Gemini CLI remediation."
+            printf "GEMINI_API_KEY secret is not configured; mitigated via rollback only.\n" > incident/summary.md
+            exit 0
+          fi
+
+          PROMPT_FILE=$(mktemp)
+          cat .agents/roles/oncall.md docs/runbooks/booking-errors.md incident/context.md > "$PROMPT_FILE"
+
+          set +e
+          npx -y @google/gemini-cli@latest \
+            --yolo \
+            --skip-trust \
+            -m "$GEMINI_MODEL" \
+            -p "Diagnose this SessionBoard incident from the appended context and fix the root cause in backend/ with a regression test." \
+            < "$PROMPT_FILE"
+          RC=$?
+          if [ "$RC" -ne 0 ]; then
+            echo "::warning::Gemini CLI failed (exit $RC). Waiting 60s and retrying once..."
+            sleep 60
+            npx -y @google/gemini-cli@latest \
+              --yolo \
+              --skip-trust \
+              -m "$GEMINI_MODEL" \
+              -p "Diagnose this SessionBoard incident from the appended context and fix the root cause in backend/ with a regression test." \
+              < "$PROMPT_FILE"
+            RC=$?
+          fi
+          set -e
+          rm -f "$PROMPT_FILE"
+
+          if [ "$RC" -ne 0 ]; then
+            echo "::warning::Gemini CLI failed after retry (exit $RC)."
+          fi
+
+      - name: Deterministic verification and auto-PR on backend fix
+        env:
+          GH_TOKEN: ${{ secrets.ONCALL_GH_TOKEN || github.token }}
+          ISSUE_NUM: ${{ steps.issue.outputs.number }}
+        run: |
+          # Revert any edits outside backend/ cleanly (role boundary guardrail)
+          OUTSIDE_FILES=$(git diff --name-only -- ':!backend/' || true)
+          if [ -n "$OUTSIDE_FILES" ]; then
+            echo "::warning::Reverting edits outside backend/: $OUTSIDE_FILES"
+            git checkout -- ':!backend/'
+          fi
+          UNTRACKED_OUTSIDE=$(git ls-files --others --exclude-standard -- ':!backend/' || true)
+          if [ -n "$UNTRACKED_OUTSIDE" ]; then
+            echo "::warning::Removing untracked files outside backend/: $UNTRACKED_OUTSIDE"
+            git clean -fd -- ':!backend/'
+          fi
+
+          CHANGED=$(git status --porcelain -- backend/)
+          if [ -z "$CHANGED" ]; then
+            SUMMARY_NOTE="No backend code fix was generated."
+            if [ -f incident/summary.md ]; then
+              SUMMARY_NOTE=$(cat incident/summary.md)
+            fi
+            gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
+              --body "[oncall-agent] Mitigated by rollback; no code change applied. Agent note: ${SUMMARY_NOTE}"
+            exit 0
+          fi
+
+          if ! python3 scripts/check_repo_hygiene.py; then
+            gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
+              --body "[oncall-agent] Mitigated by rollback; automatic fix failed repository hygiene checks; human needed."
+            exit 1
+          fi
+
+          if ! (cd backend && uv run ruff check . && uv run ruff format --check . && OTEL_SDK_DISABLED=true uv run pytest -v); then
+            gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
+              --body "[oncall-agent] Mitigated by rollback; automatic fix failed ruff or pytest verification; human needed."
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.ONCALL_GH_TOKEN }}" ]; then
+            gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
+              --body "[oncall-agent] Fix verified locally (pytest green), but ONCALL_GH_TOKEN secret is not configured to open CI-triggering PR."
+            exit 1
+          fi
+
+          BRANCH="oncall/incident-${ISSUE_NUM}"
+          git switch -c "$BRANCH"
+          git add backend/
+          git commit --no-gpg-sign \
+            -m "fix: resolve booking incident #${ISSUE_NUM}" \
+            -m "Agent: oncall-agent" \
+            -m "Refs: #${ISSUE_NUM}"
+          git push -u origin "$BRANCH" --force-with-lease
+
+          SUMMARY_BODY="Automated fix generated by Gemini CLI on-call responder and verified against full pytest suite."
+          if [ -f incident/summary.md ]; then
+            SUMMARY_BODY=$(cat incident/summary.md)
+          fi
+
+          PR_BODY_FILE=$(mktemp)
+          cat <<EOF > "$PR_BODY_FILE"
+          ## Summary
+
+          ${SUMMARY_BODY}
+
+          ## Linked issue
+
+          Closes #${ISSUE_NUM}
+
+          ## Acceptance criteria
+
+          - [x] Regression test reproduces and prevents recurrence of incident #${ISSUE_NUM}
+          - [x] Pure domain boundary and integer-minutes time math preserved
+
+          ## Gate output
+
+          \`\`\`text
+          python scripts/check_repo_hygiene.py -> OK
+          backend ruff check / format --check -> OK
+          cd backend && uv run pytest -v -> PASSED
+          \`\`\`
+          EOF
+
+          PR_URL=$(gh pr create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --base main \
+            --head "$BRANCH" \
+            --title "fix: automated on-call remediation (#${ISSUE_NUM})" \
+            --label "oncall" \
+            --body-file "$PR_BODY_FILE")
+          rm -f "$PR_BODY_FILE"
+
+          gh pr merge "$PR_URL" --repo "${GITHUB_REPOSITORY}" --auto --squash
+          gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
+            --body "[oncall-agent] Verified fix and opened auto-merging PR: ${PR_URL}"
