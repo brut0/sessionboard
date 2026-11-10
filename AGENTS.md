@@ -17,6 +17,8 @@ GitHub Actions, Render, Neon, OpenTelemetry + Grafana.
 | Architecture | `docs/architecture.md` (Phase 2) |
 | Testing | `docs/testing.md` (Phase 4) |
 | Deploy and rollback | `docs/deployment.md` (Phase 7) |
+| Pre-Phase-8 cloud & telemetry checklist | `docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md` |
+| Adding new features via AI SDLC (Chat + Web UI) | `docs/ai-sdlc.md`, `.agents/skills/feature-sdlc/SKILL.md` |
 | Telemetry | `docs/observability.md` (Phase 8) |
 | Incidents | `docs/runbooks/` (Phase 9) |
 
@@ -26,6 +28,7 @@ Files marked with a phase do not exist until that phase is done. If you need one
 - `docker compose up --build` (or `make up`) — full system: app http://localhost:8000, Grafana http://localhost:3000
 - `make test` — backend unit + integration (Docker required) and frontend tests
 - `make lint` — ruff + TypeScript typecheck
+- `make ai-sdlc` — companion AI SDLC Web Workbench on http://localhost:8090 (`tools/ai-sdlc/`)
 - `python scripts/check_repo_hygiene.py` — English-only and forbidden-terms check
 
 ## Hard rules
@@ -35,6 +38,6 @@ Files marked with a phase do not exist until that phase is done. If you need one
 4. Tests first (TDD). A PR without tests for its acceptance criteria is rejected.
 5. Never put names, display names, request bodies, headers, or credentials into logs, spans, or metrics.
 6. Domain code (`backend/app/domain/`) imports neither SQLAlchemy nor FastAPI. Time math uses minutes since midnight.
-7. Do not add features listed as out of scope in `docs/plan/MASTER_PLAN.md` §1.
+7. Do not add features listed as out of scope in `docs/plan/MASTER_PLAN.md` §1. Companion developer tooling lives outside SessionBoard's core app (`tools/`) and stays excluded from the runtime container.
 8. Do not read or copy anything from outside this repository unless `.local/PROTOTYPE_REUSE.md` explicitly allows it.
-9. Before claiming done, run the gate commands (skill `phase-gate`) and paste their output.
+9. Before claiming done, run the gate commands (skill `phase-gate`), sync `README.md` rubric statuses/repository layout on phase transitions, and paste their output.

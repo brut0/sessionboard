@@ -1,4 +1,4 @@
-.PHONY: all up down test test-backend test-frontend lint openapi seed hygiene
+.PHONY: all up down test test-backend test-frontend test-ai-sdlc lint openapi seed hygiene ai-sdlc
 
 all: lint test
 
@@ -15,6 +15,12 @@ test-backend:
 
 test-frontend:
 	cd frontend && npm test
+
+test-ai-sdlc:
+	cd tools/ai-sdlc && uv run pytest -v
+
+ai-sdlc:
+	cd tools/ai-sdlc && uv run uvicorn sdlc_app.main:app --host 127.0.0.1 --port 8090 --reload
 
 lint:
 	cd backend && uv run ruff check . && uv run ruff format --check .

@@ -44,6 +44,7 @@
 4. **KISS & YAGNI (Hard Scope Boundary):**
    - Build only the 4 entities (`Specialist`, `Client`, `Room`, `Session`), 2 UI tabs (`Day Board`, `Directory`), and 14 API operations defined in the specification.
    - Features listed as Out of Scope in `specs/product-spec.md` §6 are permanently forbidden.
+   - Developer productivity tooling (such as `tools/ai-sdlc/`) must stay completely decoupled from SessionBoard's FastAPI contract, React bundle, and production `Dockerfile`.
 5. **Privacy & Zero-PII Telemetry:**
    - Never record specialist names, client display names, room names, request bodies, headers, or database credentials in spans, metrics, or log lines.
    - Telemetry attributes may only carry numeric IDs, durations, HTTP status codes, and fixed enum strings (`created`, `conflict`, `not_found`, `invalid`, `error`).
@@ -66,3 +67,4 @@ A task, pull request, or phase is **Done** only when all of the following hold:
 - [ ] Repository hygiene check passes: `python scripts/check_repo_hygiene.py` outputs `OK: 0 violations`.
 - [ ] Reviewed by the Reviewer agent against `.agents/roles/reviewer.md` with zero blocking findings.
 - [ ] Affected documentation (`docs/architecture.md`, `docs/testing.md`, `docs/deployment.md`, `docs/observability.md`) is updated in the same change.
+- [ ] At every phase gate or architectural change, `README.md` rubric status badges, command examples, and repository structure map are updated before declaring completion.

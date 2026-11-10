@@ -35,6 +35,8 @@ Also use the globally installed Superpowers skills where they fit: `test-driven-
 - [ ] Read `specs/product-spec.md`, answer clarifications, reply **"spec approved"**.
 
 ### Before Phase 7 (≈30 min) — hosting
+> 👉 **Detailed step-by-step guide:** See [`docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md`](PRE_PHASE_8_HUMAN_CHECKLIST.md) for exact UI clicks, Pitfall #6 / #14 checks, and Phase 7 Gate verification steps up to Phase 8.
+
 1. **Neon** (https://neon.tech, sign in with GitHub, no card): create project `sessionboard-dev` (Postgres 16, region `AWS Europe Central 1 (Frankfurt)`), then project `sessionboard-prod` (same). For each: Dashboard → Connect → **turn "Connection pooling" off** → copy the connection string.
 2. **Render** (https://render.com, sign in with GitHub): after the first `cd-dev.yml` run has pushed an image **and** you made the GHCR package public (GitHub → your profile → Packages → `sessionboard` → Package settings → Change visibility → Public):
    - New → Web Service → **Existing Image** → `ghcr.io/<owner>/sessionboard:<sha from the run>` → name `sessionboard-dev`, region Frankfurt, instance type **Free**.
