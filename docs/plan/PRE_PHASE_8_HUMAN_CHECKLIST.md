@@ -9,8 +9,8 @@
 
 Before starting these steps:
 - **Phases 0–6** passed on GitHub (`Issue #1`).
-- **Phase 7 workflows** (`cd-dev.yml`, `deploy-prod.yml`, `rollback.yml`, `synthetic-probe.yml`) and `scripts/synthetic_probe.py` are merged on `main`.
-- **Initial GHCR image** already exists at `ghcr.io/brut0/sessionboard:f73bafab66114d51d2a7b661cdf93d15151c777f` (and `:latest`). After this PR merges, `cd-dev.yml` will push a **second** image tag `<latest_main_sha>`, giving you two distinct image SHAs to verify rollback cleanly.
+- **Phase 7 workflows** (`cd-dev.yml`, `deploy-prod.yml`, `rollback.yml`, `synthetic-probe.yml`) and `scripts/synthetic_probe.py` are merged on `main`, and `cd-dev.yml` pushes both **`ghcr.io/brut0/sessionboard:<sha>`** and the owner-gated companion image **`ghcr.io/brut0/sessionboard-ai-sdlc:<sha>`**.
+- **Initial GHCR image** already exists at `ghcr.io/brut0/sessionboard:f73bafab66114d51d2a7b661cdf93d15151c777f` (and `:latest`). After this PR merges, `cd-dev.yml` pushes `<latest_main_sha>`, giving you distinct image SHAs to verify rollback cleanly.
 - **Issue `#14`** (`[T13] Cloud deployment...`) has been reopened and stays open until you complete Steps 1–5 below and post the Phase 7 Gate evidence.
 
 ---
@@ -27,6 +27,7 @@ Render Free Web Services pull images from GHCR without registry credentials, and
 4. Click **Package settings** (bottom right).
 5. Scroll to **Danger Zone** → **Change visibility** → select **Public**.
 6. Type `sessionboard` to confirm.
+   - *(Optional if deploying companion Service 3 `sessionboard-ai-sdlc` below)*: Repeat for **`sessionboard-ai-sdlc`** (zero secrets are baked into the container image; alternatively keep it Private on GHCR and add a `read:packages` Registry Credential in Render).
 
 **Quick check:** Make sure the package shows the green **Public** badge and is linked to `brut0/sessionboard`.
 
@@ -107,6 +108,35 @@ Render Free Web Services pull images from GHCR without registry credentials, and
    - Wait for first deploy → **Settings** → set **Health Check Path** to `/api/health` → **Save Changes** → copy **Deploy Hook** as `RENDER_DEPLOY_HOOK_PROD`.
    - Copy the prod URL (e.g., `https://sessionboard-prod.onrender.com`, no trailing `/`) and verify `/api/health` and `/api/version` (`env: "prod"`).
 
+5. **Create Service 3 (`sessionboard-ai-sdlc` — Owner-Gated Companion AI SDLC Workbench, Optional):**
+   - Click **New +** → **Web Service** → select **Deploy an existing image from a registry**.
+   - **Image URL:** `ghcr.io/brut0/sessionboard-ai-sdlc:<same_sha>` *(pull publicly, or configure Render Registry Credentials with a `read:packages` PAT)*.
+   - **Name:** `sessionboard-ai-sdlc`
+   - **Region:** `Frankfurt (EU Central)`
+   - **Instance Type:** **Free** (`$0 / month`; sleeps after 15m idle — combined with `dev` and `prod` still stays comfortably below Render's 750 free instance hours/month)
+   - Add **Environment Variables** (**NEVER leave `SDLC_OWNER_PASSWORD` empty**):
+
+     | Key | Value | Notes |
+     |---|---|---|
+     | `APP_ENV` | `prod` | Enforces fail-closed auth & HTTPS `__Host-` cookie mode |
+     | `SDLC_REQUIRE_AUTH` | `true` | Blocks unauthenticated `/api/*` (`401`) & `/docs` |
+     | `SDLC_OWNER_PASSWORD` | `<20+ char unique passphrase>` | Generate locally; required >= 12 chars (else server fails closed with `503`) |
+     | `SDLC_SESSION_SECRET` | `<32+ char random hex>` | Dedicated HMAC signing secret (generate via `openssl rand -hex 32`) |
+     | `SDLC_CLONE_REPO_URL` | `https://github.com/brut0/sessionboard.git` | Token-free HTTPS URL for ephemeral repo clone on startup |
+     | `GEMINI_API_KEY` | `<your Google AI Studio key>` | Powers Stage 1–6 LLM requests server-side (never returned raw) |
+     | `GH_TOKEN` | `<fine-grained PAT: Issues/PRs/Contents RW>` | Optional, strictly repo-scoped (`brut0/sessionboard` only); authenticates `gh` & `git push` without writing tokens into `.git/config` |
+
+   - Wait for deploy → **Settings** → set **Health Check Path** to `/api/health` → copy **Deploy Hook** as `RENDER_DEPLOY_HOOK_AI_SDLC` and URL as `AI_SDLC_URL` (`https://sessionboard-ai-sdlc.onrender.com`).
+   - **Verify fail-closed owner gate (PowerShell):**
+     ```powershell
+     curl.exe -fsS https://sessionboard-ai-sdlc.onrender.com/api/health
+     # Expected: {"status":"ok","auth_required":true,"auth_configured":true,"authenticated":false,"repo_root":null,...}
+
+     curl.exe -i https://sessionboard-ai-sdlc.onrender.com/api/config
+     # MUST return HTTP 401 Unauthorized (never 200!)
+     ```
+     Then open `https://sessionboard-ai-sdlc.onrender.com` in your browser, test entering 1 wrong password -> `401`, sign in with `SDLC_OWNER_PASSWORD`, and test clicking **Sign Out** -> locks workspace back cleanly.
+
 ---
 
 ### Step 4: Configure GitHub Secrets, Variables & Protected `production` Environment (5 min)
@@ -116,10 +146,12 @@ Go to **GitHub** → `brut0/sessionboard` → **Settings**:
 1. **Secrets and variables → Actions → Secrets tab → New repository secret:**
    - `RENDER_DEPLOY_HOOK_DEV` = `<RENDER_DEPLOY_HOOK_DEV>`
    - `RENDER_DEPLOY_HOOK_PROD` = `<RENDER_DEPLOY_HOOK_PROD>`
+   - `RENDER_DEPLOY_HOOK_AI_SDLC` = `<RENDER_DEPLOY_HOOK_AI_SDLC>` *(if Service 3 created; workflow warns and skips gracefully if omitted)*
 
 2. **Secrets and variables → Actions → Variables tab → New repository variable:**
    - `DEV_URL` = `https://sessionboard-dev.onrender.com` *(exact URL Render assigned you, **NO trailing slash**)*
    - `PROD_URL` = `https://sessionboard-prod.onrender.com` *(exact URL Render assigned you, **NO trailing slash**)*
+   - `AI_SDLC_URL` = `https://sessionboard-ai-sdlc.onrender.com` *(optional companion URL; enables automatic `401` smoke check in `cd-dev.yml`)*
 
 3. **Environments → New environment:**
    - **Name:** `production` *(exact lowercase spelling)*
@@ -194,7 +226,8 @@ While logged in / setting up keys:
 | 1 | `ghcr.io/brut0/sessionboard` package visibility = **Public** | [ ] |
 | 2 | Neon `sessionboard-dev` & `sessionboard-prod` created (Postgres 16, Frankfurt, **non-pooler URLs**) | [ ] |
 | 3 | Render `sessionboard-dev` & `sessionboard-prod` live (`/api/health` → `200 ok`) | [ ] |
-| 4 | GitHub Secrets (`RENDER_DEPLOY_HOOK_DEV`, `RENDER_DEPLOY_HOOK_PROD`) & Variables (`DEV_URL`, `PROD_URL`) set | [ ] |
+| 3b | *(Optional companion)* Render `sessionboard-ai-sdlc` live with `SDLC_REQUIRE_AUTH=true` & strong `SDLC_OWNER_PASSWORD` (`GET /api/config` → `401`) | [ ] |
+| 4 | GitHub Secrets (`RENDER_DEPLOY_HOOK_DEV`, `RENDER_DEPLOY_HOOK_PROD`, optional `RENDER_DEPLOY_HOOK_AI_SDLC`) & Variables (`DEV_URL`, `PROD_URL`, optional `AI_SDLC_URL`) set | [ ] |
 | 5 | GitHub Environment `production` created with required reviewer `brut0` | [ ] |
 | 6 | `deploy-prod.yml` approved & green; `rollback.yml` run green on `dev` + URL saved | [ ] |
 | 7 | Issue `#1` Phase 7 Gate marked `PASS` & Issue `#14` closed | [ ] |

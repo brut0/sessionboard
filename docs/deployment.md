@@ -7,11 +7,12 @@
 
 ## 1. Environments Overview
 
-| Environment | Purpose | Public URL | Database | Trigger | Required Approvals |
+| Environment | Purpose | Public URL | Database | Trigger | Required Approvals & Access |
 |---|---|---|---|---|---|
-| **local** | Feature development & tests | `http://localhost:8000` | Local Docker Compose `db` (Postgres 16) | `docker compose up --build` | None |
-| **dev** | Continuous integration & smoke validation | `https://sessionboard-dev.onrender.com` | Neon Serverless Postgres (`sessionboard-dev`) | Automated on every push to `main` via `cd-dev.yml` | None |
+| **local** | Feature development & tests | `http://localhost:8000` (optional companion workbench `http://127.0.0.1:8090` via `--profile sdlc`) | Local Docker Compose `db` (Postgres 16) | `docker compose up --build` (or `--profile sdlc up --build`) | None locally (`ai-sdlc` supports optional `SDLC_REQUIRE_AUTH=true`) |
+| **dev** | Continuous integration & smoke validation | `https://sessionboard-dev.onrender.com` | Neon Serverless Postgres (`sessionboard-dev`) | Automated on every push to `main` via `cd-dev.yml` | None (core app is public studio demo; zero PII) |
 | **prod** | Production studio scheduling | `https://sessionboard-prod.onrender.com` | Neon Serverless Postgres (`sessionboard-prod`) | Manual dispatch via `deploy-prod.yml` with target `sha` | Owner approval via GitHub `production` environment |
+| **ai-sdlc (companion)** | Isolated owner-only AI SDLC workbench | `https://sessionboard-ai-sdlc.onrender.com` (optional) | None (stateless + ephemeral git clone via `SDLC_CLONE_REPO_URL`) | Automated push to `main` via `cd-dev.yml` (`build-and-push-ai-sdlc` + `deploy-ai-sdlc`) | **Strictly Owner-Only (`SDLC_REQUIRE_AUTH=true`)**: fail-closed `503` if password missing, `401` + signed `__Host-sdlc_session` cookie + `429` rate limiter |
 
 ---
 
@@ -23,8 +24,9 @@
 - **Database:** [Neon Serverless PostgreSQL](https://neon.tech) (PostgreSQL 16).
   - Separate isolated projects for `dev` and `prod`.
   - Migrations executed automatically on container startup via `alembic upgrade head` in `docker-entrypoint.sh`.
-- **Image Registry:** GHCR (`ghcr.io/brut0/sessionboard:<sha>`).
-  - Images built and pushed by GitHub Actions (`cd-dev.yml`).
+- **Image Registry:** GHCR (`ghcr.io/brut0/sessionboard:<sha>` for the studio app, and `ghcr.io/brut0/sessionboard-ai-sdlc:<sha>` for the decoupled companion workbench).
+  - Images built and pushed cleanly by GitHub Actions (`cd-dev.yml`).
+  - `tools/` stays excluded from `ghcr.io/brut0/sessionboard` via `.dockerignore`.
 
 ---
 
@@ -53,6 +55,7 @@ Rollbacks in SessionBoard are designed to be instant and zero-downtime. To achie
    ```
 5. **Version Polling:** Polls `GET https://sessionboard-dev.onrender.com/api/version` every 15s (timeout 10 min) until `version` equals the commit SHA.
 6. **Synthetic Smoke Probe:** Executes `python scripts/synthetic_probe.py --base-url $DEV_URL --mode once` to confirm booking and cancellation flows succeed.
+7. **Companion AI SDLC Workbench (`build-and-push-ai-sdlc` + `deploy-ai-sdlc`):** Builds `tools/ai-sdlc/Dockerfile` (`SDLC_REQUIRE_AUTH=true`, `APP_ENV=prod` baked in), pushes `ghcr.io/brut0/sessionboard-ai-sdlc:<sha>`, triggers `RENDER_DEPLOY_HOOK_AI_SDLC` (gracefully skipping with a warning if unset), polls `$AI_SDLC_URL/api/health`, and fails deployment if unauthenticated `GET /api/config` does not return `HTTP 401`.
 
 ### 4.2 Production Deployment (`.github/workflows/deploy-prod.yml`)
 1. **Trigger:** `workflow_dispatch` with required input `sha`.
@@ -118,12 +121,26 @@ Because Render requires an existing container image to configure a service, foll
        - `OTEL_SDK_DISABLED=true`
      - Health Check Path: `/api/health`
      - Copy **Deploy Hook** URL.
+   - Web Service 3 (`sessionboard-ai-sdlc` — Optional Companion Workbench, **Owner-Gated**):
+     - Source: Existing Image → `ghcr.io/brut0/sessionboard-ai-sdlc:<sha>` (zero secrets baked into image; pull publicly or configure Render Registry Credentials with a `read:packages` PAT if keeping the package private)
+     - Environment Variables:
+       - `APP_ENV=prod`
+       - `SDLC_REQUIRE_AUTH=true`
+       - `SDLC_OWNER_PASSWORD=<strong 20+ character passphrase>`
+       - `SDLC_SESSION_SECRET=<random 32+ hex secret>`
+       - `SDLC_CLONE_REPO_URL=https://github.com/brut0/sessionboard.git` *(token-free URL; `GH_TOKEN` stays strictly in env)*
+       - `GEMINI_API_KEY=<Google AI Studio API key>`
+       - `GH_TOKEN=<optional fine-grained PAT for issues & PRs>`
+     - Health Check Path: `/api/health`
+     - Copy **Deploy Hook** URL.
 5. **Configure GitHub Secrets & Variables:**
    - Secrets:
      - `RENDER_DEPLOY_HOOK_DEV`
      - `RENDER_DEPLOY_HOOK_PROD`
+     - `RENDER_DEPLOY_HOOK_AI_SDLC` *(optional companion service)*
    - Variables:
      - `DEV_URL` (e.g. `https://sessionboard-dev.onrender.com`)
      - `PROD_URL` (e.g. `https://sessionboard-prod.onrender.com`)
+     - `AI_SDLC_URL` (e.g. `https://sessionboard-ai-sdlc.onrender.com`, optional)
 6. **Configure Production Environment:**
    - Settings → Environments → New environment `production` → Add required reviewer: Owner account (`brut0`).

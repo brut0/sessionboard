@@ -40,6 +40,11 @@ flowchart LR
   OTEL -->|"OTLP HTTP 4318"| LGTM["📊 Grafana Stack<br/>(Tempo · Loki · Mimir · Alerting)"]
   LGTM -->|"Webhook repository_dispatch"| ONCALL["🤖 GitHub Actions: oncall.yml<br/>(1. Rollback · 2. Gemini CLI Fix PR)"]
   ONCALL -->|"Render Deploy Hook (&imgURL=)"| APP
+
+  subgraph SDLC["🛠️ Optional Decoupled Companion: sessionboard-ai-sdlc (:8090 / Render Free)"]
+    OWNER["🔐 Owner Passphrase<br/>(Signed __Host- Cookie / Bearer)"] --> WB["AI SDLC Web Workbench<br/>(LLM API + Hygiene + Git/PR)"]
+  end
+  OWNER -. "Local --profile sdlc / Cloud GHCR" .-> APP
 ```
 
 ---

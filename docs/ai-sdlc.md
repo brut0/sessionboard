@@ -46,6 +46,21 @@ When you want a visual, interactive control plane next to SessionBoard (`http://
 
 ### 1. Launch Alongside SessionBoard
 
+#### Option 1: All-in-One Docker Compose (`--profile sdlc`)
+Start SessionBoard (`:8000`), PostgreSQL 16, Grafana OTel-LGTM (`:3000`), and the Companion AI SDLC Web Workbench (`127.0.0.1:8090`) together:
+
+```powershell
+docker compose --profile sdlc up --build
+```
+To test owner-gated authentication inside local Compose:
+```powershell
+$env:SDLC_REQUIRE_AUTH = "true"
+$env:SDLC_OWNER_PASSWORD = "your-strong-passphrase-here"
+docker compose --profile sdlc up --build
+```
+
+#### Option 2: Lightweight Python Dev Server (`make ai-sdlc`)
+
 ```powershell
 # Terminal 1 (SessionBoard target app, optional for live smoke checks)
 docker compose up --build
@@ -56,6 +71,10 @@ uv sync
 uv run uvicorn sdlc_app.main:app --host 127.0.0.1 --port 8090 --reload
 ```
 Open **http://127.0.0.1:8090**, click **API Settings**, select **Google Gemini API** (`gemini-2.5-flash`) or **OpenAI-Compatible API**, and paste your API key (stored only in git-ignored `.local/ai-sdlc/config.json`).
+
+#### Option 3: Owner-Gated Cloud Service (`sessionboard-ai-sdlc` on Render Free)
+`cd-dev.yml` builds and pushes `ghcr.io/brut0/sessionboard-ai-sdlc:<sha>` from [`tools/ai-sdlc/Dockerfile`](../tools/ai-sdlc/Dockerfile) with `SDLC_REQUIRE_AUTH=true` and `APP_ENV=prod` baked in. Configure `SDLC_OWNER_PASSWORD` (min 12 chars), `SDLC_SESSION_SECRET`, `SDLC_CLONE_REPO_URL=https://github.com/brut0/sessionboard.git`, `GEMINI_API_KEY`, and scoped `GH_TOKEN` on Render per [`docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md`](plan/PRE_PHASE_8_HUMAN_CHECKLIST.md).
+> Note: Render Free containers do not expose a Docker daemon, so full `testcontainers` integration suites execute either locally or automatically in GitHub Actions CI when you click **Open PR**.
 
 ### 2. Workbench Capabilities
 - **Stage 1 (Intake):** Analyzes the feature against `specs/constitution.md` and Non-Goals, generates clarifying questions, and proposes a clean `feat/<slug>` branch name.
@@ -68,7 +87,9 @@ Open **http://127.0.0.1:8090**, click **API Settings**, select **Google Gemini A
 - **Stage 5 (Live Verification Console + AI Fixer):** Executes `hygiene`, `ruff`, `pytest`, `typecheck` + `vitest`, `redocly lint`, `npm run gen:api`, and `tools/ai-sdlc` tests with one-click **"Send Last Failure to AI Fixer"**.
 - **Stage 6 (AI Reviewer + Branch / Trailers Commit / PR):** Runs `.agents/roles/reviewer.md` against `git diff HEAD`, creates feature branches (never touching `main`), commits with `Agent:` & `Refs: #N` trailers, and opens the PR via `gh pr create`.
 
-### Built-in Safety Guardrails
+### Built-in Safety Guardrails & Owner-Only Authentication
+- **Fail-Closed Owner Gate:** Whenever `SDLC_REQUIRE_AUTH=true`, `APP_ENV != local`, `RENDER=true`, or `SDLC_OWNER_PASSWORD` is non-empty, `/api/*` and `/docs` reject unauthenticated callers (`401`) and fail closed (`503`) if `SDLC_OWNER_PASSWORD` is missing or `< 12` chars. `/api/health` leaks zero paths or branch names while unauthenticated.
+- **Hardened Session Lifecycle:** `POST /api/auth/login` verifies passwords in constant time (`hmac.compare_digest` over SHA-256 digests), mints HMAC-SHA256 `HttpOnly; SameSite=Lax` cookies (`__Host-sdlc_session; Secure` on HTTPS), locks brute-force attempts after 5 failures (`429 Retry-After`), blocks cross-site mutations (`Sec-Fetch-Site: cross-site` -> `403`), and enforces strict CSP (`default-src 'self'`).
 - **Path Containment:** Patches outside the repo root or targeting `.git/`, `.local/`, `.env`, `node_modules/`, `frontend/dist/`, or `backend/app/static/` are rejected before any disk write.
 - **Hygiene Pre-Flight:** Every proposed file patch, branch name, commit message, issue, and PR body is scanned for Cyrillic characters and `.local/forbidden-terms.txt` regexes (`HTTP 422` on violation).
-- **Decoupled from SessionBoard:** `tools/` is excluded in `.dockerignore` and isolated in its own `uv` environment so SessionBoard's OpenAPI contract tests and container build stay completely unaffected.
+- **Decoupled from SessionBoard:** `tools/` is excluded in `.dockerignore` and isolated in its own `uv` environment & container image (`sessionboard-ai-sdlc`) so SessionBoard's OpenAPI contract tests and runtime image stay completely unaffected.

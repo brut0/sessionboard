@@ -38,8 +38,8 @@ This table guides peer reviewers directly to the evidence for every grading crit
 | **3** | **Agent Team Specification** | **2 pts** | ✅ | [`docs/agents/team.md`](docs/agents/team.md) + 8 role prompts in [`.agents/roles/`](.agents/roles/) + 4 workflow skills in [`.agents/skills/`](.agents/skills/) + dispatch matrix in [`docs/plan/EXECUTION_GUIDE.md` §3.5](docs/plan/EXECUTION_GUIDE.md) |
 | **4** | **Context Management** | **2 pts** | ✅ | [`AGENTS.md`](AGENTS.md) entry point linking modular docs: [`docs/process.md`](docs/process.md), [`docs/agents/team.md`](docs/agents/team.md), [`docs/architecture.md`](docs/architecture.md), [`docs/testing.md`](docs/testing.md), [`docs/deployment.md`](docs/deployment.md), [`docs/ai-sdlc.md`](docs/ai-sdlc.md), [`docs/adr/`](docs/adr/), [`specs/`](specs/) |
 | **5** | **Application (Full-Stack + DB)** | **2 pts** | ✅ | React 19 SPA (`DayBoard`, `BookingModal`, `DirectoryPage`) ↔ FastAPI REST API ↔ PostgreSQL 16 with `pg_advisory_xact_lock` (Issues [`#2`–`#11`](https://github.com/brut0/sessionboard/issues), PRs `#18`–`#27`) |
-| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **54 core app tests passing** (39 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract tests, 15 frontend Vitest/RTL/MSW tests) + **33 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`](https://github.com/brut0/sessionboard/issues)) |
-| **7** | **Containerization** | **2 pts** | ✅ | Multi-stage [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) (`db` + `app` + `otel-lgtm`) verified with `docker compose up --build` / `make up` (Issue [`#2`](https://github.com/brut0/sessionboard/issues/2), PR `#18`) |
+| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **54 core app tests passing** (39 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract tests, 15 frontend Vitest/RTL/MSW tests) + **38 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`](https://github.com/brut0/sessionboard/issues)) |
+| **7** | **Containerization** | **2 pts** | ✅ | Multi-stage [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) (`db` + `app` + `otel-lgtm`) + companion [`tools/ai-sdlc/Dockerfile`](tools/ai-sdlc/Dockerfile) (`--profile sdlc`, Issue [`#2`](https://github.com/bruti/sessionboard/issues/2), PR `#18`) |
 | **8** | **Deployment** | **2 pts** | 🚧 *Phase 7 (Human Setup)* | Deployment workflows & GHCR image built (PR `#31`); awaiting human Render Free + Neon PostgreSQL 16 setup and live verification per [`docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md`](docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md) (Issue [`#14`](https://github.com/brut0/sessionboard/issues/14)) |
 | **9** | **CI/CD (PR CI → Auto Dev → Manual Prod + Rollback)** | **3 pts** | ✅ CI / 🚧 CD | `ci.yml` live & enforced by branch protection (`Repository Hygiene`, `Backend Lint & Tests`, `Frontend Lint & Tests`, `Docker Build`); `cd-dev.yml`, `deploy-prod.yml`, `rollback.yml`, and `synthetic-probe.yml` merged in PR `#31` ([`docs/deployment.md`](docs/deployment.md), Issues [`#13`, `#14`](https://github.com/brut0/sessionboard/issues/13)) |
 | **10** | **Observability (Traces + Metrics + Logs, Zero PII)** | **2 pts** | 🔜 *Phase 8* | OpenTelemetry instrumentation of `POST /api/sessions` (`booking.create` span, `sessionboard_bookings_total`, JSON logs with shared `trace_id`, `test_telemetry_no_pii.py`) in [`specs/nfr-observability.md`](specs/nfr-observability.md) (Issue [`#15`](https://github.com/brut0/sessionboard/issues/15)) |
@@ -169,14 +169,73 @@ flowchart LR
 
 ---
 
-## 🛠️ Dual AI SDLC Pipeline & Pre-Phase-8 Checklist
+## 🛠️ Dual AI SDLC Pipeline & Owner-Gated Deployment
 
-After the initial build phases, SessionBoard provides **two full SDD + TDD AI workflows** ([`docs/ai-sdlc.md`](docs/ai-sdlc.md)) for designing, testing, verifying, and shipping new features or bug fixes without breaking domain purity or OpenAPI parity:
+SessionBoard includes a **complete, reusable Dual AI SDLC Pipeline** ([`docs/ai-sdlc.md`](docs/ai-sdlc.md)) for designing, testing, verifying, and shipping post-MVP features and bug fixes while preserving every architectural invariant (`AGENTS.md`, `specs/constitution.md`, domain purity, OpenAPI parity, zero-PII logs, English-only hygiene).
 
-1. **Option A — Chat-Native Pipeline (Antigravity Subagents):** Trigger [`.agents/skills/feature-sdlc/SKILL.md`](.agents/skills/feature-sdlc/SKILL.md) directly in chat to run Constitution check → `spec-agent` (+ human `"spec approved"` gate) → `architect-agent` (+ Redocly lint + GitHub issue) → parallel QA/Backend/Frontend TDD → Verification gates → `reviewer-agent` → `README.md` sync & PR.
-2. **Option B — Companion AI SDLC Web Workbench (`http://127.0.0.1:8090`):** Launch [`tools/ai-sdlc/`](tools/ai-sdlc/README.md) alongside SessionBoard (`make ai-sdlc`) for an interactive browser UI wired directly to **Google Gemini API** or **OpenAI-compatible APIs** (plus optional headless Gemini CLI), enforcing spec approval locks (`409`), path containment, English-only pre-flight checks (`422`), live gate execution, AI failure fixing, and PR creation while staying cleanly excluded from SessionBoard's runtime container.
+```mermaid
+flowchart TB
+  Req["💡 New Feature or Bug Fix Request"] --> Choice{"Choose Workflow Mode"}
 
-> 📋 **Human Setup Before Phase 8:** Follow [`docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md`](docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md) for the exact step-by-step cloud bootstrap (GHCR Public toggle, Neon non-pooler DBs, Render Free `dev`/`prod`, GitHub Secrets/Variables/Environment `production`, live `rollback.yml` verification, and Grafana Cloud OTLP token generation).
+  Choice -->|"Option A: Chat-Native"| Chat["Antigravity Chat: feature-sdlc skill<br/>(.agents/skills/feature-sdlc/SKILL.md)"]
+  Choice -->|"Option B: Companion Web UI (:8090)"| Web["tools/ai-sdlc Web Workbench<br/>(Local make ai-sdlc · Compose --profile sdlc · Render Free)"]
+
+  Web -->|"Cloud / Protected Mode"| Auth{"🔒 Owner Gate<br/>(SDLC_REQUIRE_AUTH=true)"}
+  Auth -->|"Password < 12 chars / missing"| Fail["503 Fail-Closed<br/>(Zero workspace/LLM access)"]
+  Auth -->|"Invalid / brute-force"| Block["401 / 429 Rate Limit + Sec-Fetch-Site 403"]
+  Auth -->|"Valid passphrase / Bearer"| Pipe
+
+  Chat --> Pipe["1. Intake & Non-Goals Check"]
+  Pipe --> Spec["2. Spec Authoring (BR/AC) -> 🛑 Human Spec Approval Gate (HTTP 409 lock)"]
+  Spec --> Arch["3. Architect Plan + OpenAPI + Expand-Only DB + GitHub Issue"]
+  Arch --> TDD["4. TDD Red (Failing Tests) -> Green (Minimal Code) + Optional Gemini CLI"]
+  TDD --> Gates["5. Live Gates (Hygiene, Ruff, Pytest, Vitest, Redocly, OpenAPI Gen) + AI Fixer"]
+  Gates --> Ship["6. 10-Point AI Review -> Feature Branch -> Trailers Commit -> PR + CI -> CD"]
+```
+
+### Option A — Chat-Native Multi-Agent Pipeline (Antigravity IDE / Chat)
+
+Best when working directly inside Antigravity with full local codebase & subagent orchestration ([`.agents/skills/feature-sdlc/SKILL.md`](.agents/skills/feature-sdlc/SKILL.md)):
+
+1. **Trigger in Chat:** Ask:
+   ```text
+   Use the feature-sdlc skill to implement: <describe your feature or bug fix>.
+   Stop after Stage 1 (Spec) for my "spec approved" before changing OpenAPI or code.
+   ```
+2. **Enforced Stages:**
+   - **Stage 0 (Intake & Constitution Guard):** Validates the request against [`specs/product-spec.md`](specs/product-spec.md) §7 Non-Goals (`No Auth in core scheduler`, `No Pricing`, etc.), zero-PII telemetry rules, and pure domain boundaries (`backend/app/domain/`).
+   - **Stage 1 (Spec First + Human Pause):** Dispatches `spec-agent` to draft Business Rules (`BR-*`) and `Given/When/Then` ACs in `specs/product-spec.md`, then pauses until you explicitly reply `"spec approved"`.
+   - **Stage 2 (Architecture + GitHub Issue):** Dispatches `architect-agent` to update [`specs/api/openapi.yaml`](specs/api/openapi.yaml) (verified via Redocly lint), design expand-only Alembic migrations, update [`specs/tasks.md`](specs/tasks.md), and open a labeled GitHub Issue via `issue-workflow`.
+   - **Stage 3 (Parallel TDD Dispatch):** Launches independent `qa-agent` (`test_ac_*`), `backend-agent`, and `frontend-agent` (`npm run gen:api` + Vitest/RTL/MSW) in test-first order.
+   - **Stage 4–6 (Verification, Review, Docs & Ship):** Runs `check_repo_hygiene.py`, `ruff`, `pytest`, `typecheck`, `vitest`, 10-point `reviewer-agent` audit, `README.md` sync, feature PR creation, CI watch, and auto-dev rollout.
+
+### Option B — Companion AI SDLC Web Workbench (`tools/ai-sdlc/` — Port `8090`)
+
+Best when you want an independent browser control plane running side-by-side next to SessionBoard (`:8090` alongside `:8000`) powered directly by **Google Gemini API** (`GEMINI_API_KEY`) or any **OpenAI-compatible endpoint** (`OPENAI_API_KEY` + `OPENAI_BASE_URL`, e.g., OpenAI, OpenRouter, local Ollama), plus optional headless **Gemini CLI**:
+
+- **Interactive Stage Controls:** Create tracked pipeline runs stored in git-ignored `.local/ai-sdlc/runs/`, execute `intake -> spec -> architect -> tdd_tests -> implement -> fix_failure -> review`, inspect unified diffs before writing a single byte, and selectively apply file patches.
+- **Spec-First Lock (`HTTP 409`):** `architect`, `tdd_tests`, and `implement` stages are rejected by the server until you click **Approve Spec**.
+- **Pre-Flight Safety Guards (`HTTP 422`):** Every file patch, branch name, commit message, issue, and PR body is checked against path containment rules (never touching `.git/`, `.local/`, `.env*`, `node_modules/`, `frontend/dist/`, or `backend/app/static/`) and English-only / forbidden-terms hygiene (`scripts/check_repo_hygiene.py`).
+- **One-Click Verification & AI Fixer:** Runs `hygiene`, `backend_lint`, `backend_tests`, `frontend_checks`, `openapi_lint`, `openapi_sync`, and `ai_sdlc_tests`; failed logs can be routed directly to Stage 5 (`fix_failure`) to generate targeted patch candidates.
+- **Git & PR Automation:** Creates `feat/*` branches (blocks direct commits to `main`), commits with `Agent:` & `Refs: #N` trailers (`commit.gpgsign=false` headless safe), and opens GitHub PRs via `gh`.
+
+### Deployment Modes & Owner-Only Security Model
+
+`tools/ai-sdlc` stays **100% decoupled** from SessionBoard's core container (excluded via `.dockerignore`) and runs in three supported topologies:
+
+| Mode | Command / Service | Auth Default | Intended Use |
+|---|---|---|---|
+| **Local Python** | `make ai-sdlc` (`127.0.0.1:8090`) | Open locally (`SDLC_REQUIRE_AUTH=false` when `APP_ENV=local` and no password set) | Fast local feature iteration without container rebuilds |
+| **Full-Suite Docker Compose** | `docker compose --profile sdlc up --build` (`127.0.0.1:8090` alongside `:8000` & `:3000`) | Local open by default; toggle `SDLC_REQUIRE_AUTH=true` + `SDLC_OWNER_PASSWORD=...` | Complete all-in-one local stack (`db` + `app` + `otel-lgtm` + `ai-sdlc`) |
+| **Cloud Companion (Render Free)** | `sessionboard-ai-sdlc` (`ghcr.io/brut0/sessionboard-ai-sdlc:<sha>`) | **Strictly fail-closed** (`SDLC_REQUIRE_AUTH=true`, `APP_ENV=prod`) | Remote owner access over HTTPS without leaking repo control |
+
+> 🔐 **How Owner-Only Protection Is Enforced (Fail-Closed by Default):**
+> 1. **Fail-Closed Startup Guard (`503`):** Whenever `SDLC_REQUIRE_AUTH=true`, `APP_ENV != local`, `RENDER=true`, or `SDLC_OWNER_PASSWORD` is non-empty, if `SDLC_OWNER_PASSWORD` is missing or shorter than 12 characters, all workbench `/api/*` and `/docs` routes return `503 Service Unavailable`.
+> 2. **Signed Cookie & Bearer Auth (`401`):** Every workspace, config, LLM stage, patch, gate, and Git route requires either a valid HMAC-SHA256 signed `HttpOnly; SameSite=Lax` cookie (`__Host-sdlc_session; Secure` on HTTPS) obtained via `POST /api/auth/login`, or `Authorization: Bearer <SDLC_OWNER_PASSWORD>`. Comparison uses SHA-256 pre-hashed `hmac.compare_digest`.
+> 3. **Brute-Force & CSRF Hardening (`429` / `403`):** 5 wrong passphrase attempts lock client login for 60s (`429 Retry-After`); `Sec-Fetch-Site: cross-site` mutating requests are rejected with `403`; strict CSP (`default-src 'self'`), `X-Frame-Options: DENY`, `Clear-Site-Data` on `POST /api/auth/logout`, and zero-leak `/api/health` (omits branch/paths when unauthenticated).
+> 4. **Zero-Leak Cloud Bootstrap:** `SDLC_CLONE_REPO_URL` clones a shallow ephemeral workspace on Render using clean HTTPS URLs + `gh auth git-credential` (`GH_TOKEN` in env, never written to `.git/config`) and redacts tokens/keys from subprocess output and logs.
+
+> 📋 **Human Setup Before Phase 8:** Follow [`docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md`](docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md) for the click-by-click cloud setup (GHCR, Neon non-pooler DBs, Render Free `dev` / `prod` / optional owner-gated `ai-sdlc`, GitHub Secrets/Variables/Environment `production`, live `rollback.yml` verification, and Grafana Cloud OTLP token generation).
 
 ---
 
@@ -200,6 +259,9 @@ python scripts/check_repo_hygiene.py
 
 # 5. Launch the Companion AI SDLC Web Workbench alongside SessionBoard (port 8090)
 make ai-sdlc
+
+# 6. Or launch the entire 4-service suite together via Docker Compose (app + DB + Grafana + AI SDLC)
+docker compose --profile sdlc up --build
 ```
 
 ---
@@ -211,7 +273,7 @@ sessionboard/
 ├── AGENTS.md                        # Context entry point for all AI coding agents
 ├── README.md                        # Project overview, rubric status & live evidence links
 ├── Dockerfile                       # Multi-stage build (Node 22 SPA -> Python 3.12 runtime)
-├── docker-compose.yml               # Local stack: Postgres 16 + SessionBoard + Grafana OTel-LGTM
+├── docker-compose.yml               # Local stack: Postgres 16 + SessionBoard + Grafana OTel-LGTM (+ --profile sdlc)
 ├── Makefile                         # Unified dev, lint, test, OpenAPI, seed & AI SDLC targets
 ├── LICENSE                          # MIT License
 ├── backend/
@@ -243,7 +305,7 @@ sessionboard/
 │   ├── adr/0001..0003-*.md          # Architecture Decision Records
 │   └── plan/{MASTER_PLAN,EXECUTION_GUIDE,PRE_PHASE_8_HUMAN_CHECKLIST}.md
 ├── tools/
-│   └── ai-sdlc/                     # Decoupled Companion AI SDLC Web Workbench (:8090 + 33 tests)
+│   └── ai-sdlc/                     # Decoupled Owner-Gated Companion AI SDLC Workbench (Dockerfile, :8090, 38 tests)
 ├── .agents/
 │   ├── roles/*.md                   # System prompts for all 8 agent roles
 │   └── skills/*/SKILL.md            # issue-workflow, phase-gate, release-and-rollback, feature-sdlc
