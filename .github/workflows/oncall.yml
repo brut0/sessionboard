@@ -134,6 +134,10 @@ jobs:
           if [ -z "$BASE_SHA" ] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
             BASE_SHA=$(git rev-parse HEAD)
           fi
+          RESOLVED_CURRENT_SHA="$CURRENT_SHA"
+          if [ -z "$RESOLVED_CURRENT_SHA" ] || ! git cat-file -e "${RESOLVED_CURRENT_SHA}^{commit}" 2>/dev/null; then
+            RESOLVED_CURRENT_SHA="$BASE_SHA"
+          fi
 
           OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
           TARGET_SHA=""
@@ -144,7 +148,7 @@ jobs:
             fi
           done
 
-          echo "current_sha=${CURRENT_SHA:-$BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "current_sha=${RESOLVED_CURRENT_SHA}" >> "$GITHUB_OUTPUT"
           echo "target_sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
 
           if [ -n "$TARGET_SHA" ] && [ "$TARGET_ENV" = "dev" ]; then
@@ -302,7 +306,7 @@ jobs:
             --yolo \
             --skip-trust \
             -m "$GEMINI_MODEL" \
-            -p "Diagnose this SessionBoard incident from the appended context and fix the root cause in backend/ with a regression test." \
+            -p "Diagnose this SessionBoard incident from the appended context, fix the root cause in backend/ with a regression test, and run uv run ruff check . && uv run ruff format . && OTEL_SDK_DISABLED=true uv run pytest -q before finishing." \
             < "$PROMPT_FILE"
           RC=$?
           if [ "$RC" -ne 0 ]; then
@@ -312,7 +316,7 @@ jobs:
               --yolo \
               --skip-trust \
               -m "$GEMINI_MODEL" \
-              -p "Diagnose this SessionBoard incident from the appended context and fix the root cause in backend/ with a regression test." \
+              -p "Diagnose this SessionBoard incident from the appended context, fix the root cause in backend/ with a regression test, and run uv run ruff check . && uv run ruff format . && OTEL_SDK_DISABLED=true uv run pytest -q before finishing." \
               < "$PROMPT_FILE"
             RC=$?
           fi
@@ -326,6 +330,8 @@ jobs:
       - name: Deterministic verification and auto-PR on backend fix
         env:
           GH_TOKEN: ${{ secrets.ONCALL_GH_TOKEN || github.token }}
+          ONCALL_TOKEN: ${{ secrets.ONCALL_GH_TOKEN }}
+          FORBIDDEN_TERMS: ${{ secrets.FORBIDDEN_TERMS }}
           ISSUE_NUM: ${{ steps.issue.outputs.number }}
         run: |
           # Revert any edits outside backend/ cleanly (role boundary guardrail)
@@ -363,7 +369,7 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${{ secrets.ONCALL_GH_TOKEN }}" ]; then
+          if [ -z "$ONCALL_TOKEN" ]; then
             gh issue comment "$ISSUE_NUM" --repo "${GITHUB_REPOSITORY}" \
               --body "[oncall-agent] Fix verified locally (pytest green), but ONCALL_GH_TOKEN secret is not configured to open CI-triggering PR."
             exit 1

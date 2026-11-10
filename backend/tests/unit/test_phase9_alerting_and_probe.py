@@ -99,6 +99,97 @@ def test_synthetic_probe_defaults_and_exits_nonzero_on_5xx(monkeypatch) -> None:
     assert exit_code == 1
 
 
+def test_synthetic_probe_once_happy_path_and_burst_mode(monkeypatch) -> None:
+    probe = _load_synthetic_probe()
+    recorded_starts: list[str] = []
+
+    def make_fake_http(*, fail_on_45: bool, clock: dict[str, float] | None = None):
+        def fake_http(
+            url: str,
+            method: str = "GET",
+            body: dict | None = None,
+            headers: dict | None = None,
+        ):
+            if url.endswith("/api/health"):
+                return 200, {"status": "ok", "db": "ok"}, {}
+            if url.endswith("/api/version"):
+                return 200, {"version": "deadbeef", "env": "dev"}, {}
+            if method == "GET" and url.endswith("/api/specialists"):
+                return 200, [{"id": 1, "name": "Probe Specialist"}], {}
+            if method == "GET" and url.endswith("/api/clients"):
+                return 200, [{"id": 2, "display_name": "Probe Client"}], {}
+            if method == "GET" and url.endswith("/api/rooms"):
+                return 200, [{"id": 3, "name": "Probe Room"}], {}
+            if method == "POST" and url.endswith("/api/sessions"):
+                assert body is not None
+                recorded_starts.append(str(body["start_time"]))
+                if clock is not None:
+                    clock["now"] += 20.0
+                if fail_on_45 and str(body["start_time"]).endswith(":45"):
+                    return (
+                        500,
+                        {"detail": "internal_error", "trace_id": "a" * 32},
+                        {"x-trace-id": "a" * 32},
+                    )
+                return 201, {"id": 99}, {"x-trace-id": "b" * 32}
+            if method == "PATCH" and "/api/sessions/" in url:
+                return 200, {"id": 99, "status": "cancelled"}, {}
+            raise AssertionError(f"Unexpected request: {method} {url}")
+
+        return fake_http
+
+    monkeypatch.setattr(probe.time, "sleep", lambda *_a, **_kw: None)
+
+    # Healthy once mode executes 3 lifecycles including a :45 slot and returns 0
+    monkeypatch.setattr(probe, "http_request", make_fake_http(fail_on_45=False))
+    once_exit = probe.run_probe_suite(
+        "http://example.test",
+        mode="once",
+        burst_minutes=1,
+        interval_seconds=0.0,
+    )
+    assert once_exit == 0
+    assert len(recorded_starts) == 3
+    assert recorded_starts[-1].endswith(":45")
+
+    # Healthy burst mode executes 3 iterations (0 -> 20 -> 40 -> 60s) and returns 0
+    recorded_starts.clear()
+    healthy_clock = {"now": 1_800_000_000.0}
+    monkeypatch.setattr(probe.time, "time", lambda: healthy_clock["now"])
+    monkeypatch.setattr(
+        probe,
+        "http_request",
+        make_fake_http(fail_on_45=False, clock=healthy_clock),
+    )
+    burst_ok_exit = probe.run_probe_suite(
+        "http://example.test",
+        mode="burst",
+        burst_minutes=1,
+        interval_seconds=0.0,
+    )
+    assert burst_ok_exit == 0
+    assert len(recorded_starts) == 3
+    assert recorded_starts[-1].endswith(":45")
+
+    # Burst mode with 5xx on every 3rd (:45) booking returns exit code 1
+    recorded_starts.clear()
+    failing_clock = {"now": 1_800_000_000.0}
+    monkeypatch.setattr(probe.time, "time", lambda: failing_clock["now"])
+    monkeypatch.setattr(
+        probe,
+        "http_request",
+        make_fake_http(fail_on_45=True, clock=failing_clock),
+    )
+    burst_fail_exit = probe.run_probe_suite(
+        "http://example.test",
+        mode="burst",
+        burst_minutes=1,
+        interval_seconds=0.0,
+    )
+    assert burst_fail_exit == 1
+    assert len(recorded_starts) == 3
+
+
 def test_grafana_alert_rule_and_contact_point_template_valid() -> None:
     alert_path = REPO_ROOT / "ops" / "grafana" / "alert-rule.json"
     tmpl_path = REPO_ROOT / "ops" / "grafana" / "contact-point-payload.tmpl"
@@ -153,6 +244,8 @@ def test_runbook_and_oncall_workflow_contract() -> None:
     raw_workflow = workflow_path.read_text(encoding="utf-8")
     for required in (
         "ONCALL_GH_TOKEN",
+        "ONCALL_TOKEN",
+        "FORBIDDEN_TERMS",
         "GEMINI_API_KEY",
         "GEMINI_CLI_TRUST_WORKSPACE",
         "GRAFANA_LOGS_URL",
@@ -162,12 +255,17 @@ def test_runbook_and_oncall_workflow_contract() -> None:
         "@google/gemini-cli",
         "--yolo",
         "--skip-trust",
+        "uv run ruff check",
         "uv run pytest",
         "oncall/incident-",
         "gh pr merge",
         "resolved",
     ):
         assert required in raw_workflow, f"Missing {required!r} in oncall.yml"
+
+    assert 'if [ -z "${{ secrets.ONCALL_GH_TOKEN }}" ]' not in raw_workflow
+    oncall_role = (REPO_ROOT / ".agents" / "roles" / "oncall.md").read_text(encoding="utf-8")
+    assert "uv run ruff" in oncall_role
 
     # Verify embedded Python script parses cleanly with zero YAML indentation corruption
     py_script = workflow["jobs"]["mitigate-and-fix"]["steps"][4]["run"]
