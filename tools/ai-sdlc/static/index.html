@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>SessionBoard AI SDLC Workbench</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link visually-hidden">Skip to main content</a>
+
+  <header class="topbar">
+    <div class="topbar-brand">
+      <h1 id="app-title">SessionBoard AI SDLC Workbench</h1>
+      <p class="subtitle">Companion Spec-Driven + TDD Engineering Pipeline (Port 8090)</p>
+    </div>
+
+    <div class="topbar-status">
+      <span id="git-badge" class="badge badge-neutral">Branch: checking...</span>
+      <span id="llm-badge" class="badge badge-neutral">LLM: loading...</span>
+      <button type="button" id="open-settings-btn" class="btn btn-secondary">
+        API Settings
+      </button>
+    </div>
+  </header>
+
+  <div class="live-regions" aria-live="polite" id="status-banner" role="status"></div>
+  <div class="live-regions live-error" aria-live="assertive" id="error-banner" role="alert" hidden></div>
+
+  <div class="workspace-grid">
+    <aside class="sidebar" aria-label="Pipeline runs and new feature request">
+      <section class="card">
+        <h2>New Feature or Change</h2>
+        <form id="new-run-form">
+          <div class="field">
+            <label for="run-title">Short title <span aria-hidden="true">*</span></label>
+            <input
+              type="text"
+              id="run-title"
+              name="title"
+              required
+              minlength="3"
+              maxlength="140"
+              aria-describedby="run-title-hint"
+              autocomplete="off"
+            >
+            <span id="run-title-hint" class="hint">Example: Add optional booking note</span>
+          </div>
+
+          <div class="field">
+            <label for="run-prompt">Feature / change request <span aria-hidden="true">*</span></label>
+            <textarea
+              id="run-prompt"
+              name="prompt"
+              rows="5"
+              required
+              minlength="5"
+              aria-describedby="run-prompt-hint"
+            ></textarea>
+            <span id="run-prompt-hint" class="hint">Describe behavior, edge cases, and acceptance goals (English only).</span>
+          </div>
+
+          <button type="submit" id="create-run-btn" class="btn btn-primary full-width">
+            Start AI SDLC Run
+          </button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="row-between">
+          <h2>Recent Runs</h2>
+          <button type="button" id="refresh-runs-btn" class="btn btn-ghost">Refresh</button>
+        </div>
+        <ul id="runs-list" class="runs-list" aria-label="Saved pipeline runs"></ul>
+      </section>
+    </aside>
+
+    <main id="main-content" tabindex="-1" class="main-pane">
+      <section id="empty-state" class="card empty-state">
+        <h2>Select or Create a Pipeline Run</h2>
+        <p>
+          This companion workbench connects directly to Google Gemini or OpenAI-compatible APIs,
+          loads SessionBoard's live specs and role prompts (<code>.agents/roles/*.md</code>),
+          enforces Spec-First &amp; TDD gates, verifies repository hygiene before every write, and opens
+          compliant GitHub Issues and Pull Requests.
+        </p>
+      </section>
+
+      <div id="run-workspace" hidden>
+        <section class="card run-header-card">
+          <div class="row-between wrap-gap">
+            <div>
+              <h2 id="active-run-title">Run</h2>
+              <p id="active-run-prompt" class="muted"></p>
+            </div>
+            <div class="status-pills">
+              <span id="pill-spec" class="badge badge-warn">Spec: Pending</span>
+              <span id="pill-issue" class="badge badge-neutral">Issue: None</span>
+              <span id="pill-branch" class="badge badge-neutral">Branch: None</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="tabs-shell">
+          <div role="tablist" aria-label="AI SDLC Pipeline Stages" class="tablist">
+            <button type="button" role="tab" id="tab-pipeline" aria-selected="true" data-panel="panel-pipeline">
+              1–4. SDD &amp; TDD Stages
+            </button>
+            <button type="button" role="tab" id="tab-patches" aria-selected="false" data-panel="panel-patches">
+              Pending File Patches (<span id="patches-count">0</span>)
+            </button>
+            <button type="button" role="tab" id="tab-gates" aria-selected="false" data-panel="panel-gates">
+              5. Verification Gates
+            </button>
+            <button type="button" role="tab" id="tab-git" aria-selected="false" data-panel="panel-git">
+              6. Review &amp; Git / PR
+            </button>
+          </div>
+
+          <div role="tabpanel" id="panel-pipeline" aria-labelledby="tab-pipeline" class="tabpanel">
+            <div class="stages-stack">
+              <!-- Stage 1: Intake -->
+              <article class="card stage-card">
+                <div class="row-between wrap-gap">
+                  <div>
+                    <h3>Stage 1 — Intake &amp; Constitution Non-Goals Check</h3>
+                    <p class="muted">Checks alignment with <code>specs/constitution.md</code> and Non-Goals.</p>
+                  </div>
+                  <button type="button" class="btn btn-primary stage-btn" data-stage="intake">
+                    Run Intake
+                  </button>
+                </div>
+                <div class="field compact-top">
+                  <label for="intake-guidance">Extra context (optional)</label>
+                  <input type="text" id="intake-guidance" name="intake_guidance">
+                </div>
+                <pre id="out-intake" class="code-box" role="region" aria-label="Intake output" tabindex="0"><code>(not executed yet)</code></pre>
+              </article>
+
+              <!-- Stage 2: Spec & Approval -->
+              <article class="card stage-card">
+                <div class="row-between wrap-gap">
+                  <div>
+                    <h3>Stage 2 — Spec Authoring &amp; Human Approval Gate</h3>
+                    <p class="muted"><code>spec-agent</code> drafts BRs &amp; Given/When/Then ACs. Architect unlocks after approval.</p>
+                  </div>
+                  <div class="btn-group">
+                    <button type="button" class="btn btn-primary stage-btn" data-stage="spec">
+                      Generate Spec Patch
+                    </button>
+                    <button type="button" id="approve-spec-btn" class="btn btn-accent">
+                      Approve Spec
+                    </button>
+                  </div>
+                </div>
+                <div class="field compact-top">
+                  <label for="spec-guidance">Clarifications / constraints for Spec Agent</label>
+                  <input type="text" id="spec-guidance" name="spec_guidance">
+                </div>
+                <pre id="out-spec" class="code-box" role="region" aria-label="Spec output" tabindex="0"><code>(not executed yet)</code></pre>
+              </article>
+
+              <!-- Stage 3: Architect & Issue -->
+              <article class="card stage-card">
+                <div class="row-between wrap-gap">
+                  <div>
+                    <h3>Stage 3 — Architect Plan, OpenAPI &amp; GitHub Issue</h3>
+                    <p class="muted"><code>architect-agent</code> designs OpenAPI / expand-only DB changes &amp; task issue.</p>
+                  </div>
+                  <div class="btn-group">
+                    <button type="button" class="btn btn-primary stage-btn" data-stage="architect">
+                      Run Architect
+                    </button>
+                    <button type="button" id="create-issue-btn" class="btn btn-secondary">
+                      Create GitHub Issue
+                    </button>
+                  </div>
+                </div>
+                <div class="field compact-top">
+                  <label for="architect-guidance">Architecture / contract guidance (optional)</label>
+                  <input type="text" id="architect-guidance" name="architect_guidance">
+                </div>
+                <pre id="out-architect" class="code-box" role="region" aria-label="Architect output" tabindex="0"><code>(not executed yet)</code></pre>
+              </article>
+
+              <!-- Stage 4: TDD Tests & Implementation -->
+              <article class="card stage-card">
+                <div class="row-between wrap-gap">
+                  <div>
+                    <h3>Stage 4 — TDD Tests First &amp; Minimal Implementation</h3>
+                    <p class="muted">Write failing tests first (<code>tdd_tests</code>), verify RED, then implement (<code>implement</code>).</p>
+                  </div>
+                  <div class="btn-group">
+                    <button type="button" class="btn btn-primary stage-btn" data-stage="tdd_tests">
+                      4a. Generate Failing Tests
+                    </button>
+                    <button type="button" class="btn btn-secondary stage-btn" data-stage="implement">
+                      4b. Implement Minimal Code
+                    </button>
+                  </div>
+                </div>
+                <div class="field compact-top">
+                  <label for="tdd-guidance">Implementation or test scope hint (optional)</label>
+                  <input type="text" id="tdd-guidance" name="tdd_guidance">
+                </div>
+                <pre id="out-tdd" class="code-box" role="region" aria-label="TDD and implementation output" tabindex="0"><code>(not executed yet)</code></pre>
+
+                <details class="cli-disclosure">
+                  <summary>Optional: Headless Gemini CLI Runner (Multi-File Workspace Agent)</summary>
+                  <div class="disclosure-body">
+                    <div class="field">
+                      <label for="cli-instruction">Headless Gemini CLI instruction</label>
+                      <textarea id="cli-instruction" rows="3"></textarea>
+                    </div>
+                    <button type="button" id="run-cli-btn" class="btn btn-secondary">
+                      Run Local Gemini CLI (--yolo)
+                    </button>
+                    <pre id="out-cli" class="code-box" role="region" aria-label="Gemini CLI output" tabindex="0"><code>(not run yet)</code></pre>
+                  </div>
+                </details>
+              </article>
+            </div>
+          </div>
+
+          <div role="tabpanel" id="panel-patches" aria-labelledby="tab-patches" class="tabpanel" hidden>
+            <article class="card">
+              <div class="row-between wrap-gap">
+                <div>
+                  <h3>Proposed File Patches &amp; Unified Diff Preview</h3>
+                  <p class="muted">All targets pass path containment and English-only/forbidden-terms checks before writing.</p>
+                </div>
+                <button type="button" id="apply-all-patches-btn" class="btn btn-accent">
+                  Apply Selected Patches to Repo
+                </button>
+              </div>
+              <div id="patches-container" class="patches-list"></div>
+            </article>
+          </div>
+
+          <div role="tabpanel" id="panel-gates" aria-labelledby="tab-gates" class="tabpanel" hidden>
+            <article class="card">
+              <div class="row-between wrap-gap">
+                <div>
+                  <h3>Stage 5 — Verification Gate Console</h3>
+                  <p class="muted">Runs SessionBoard local gates inside isolated working directories.</p>
+                </div>
+                <div class="btn-group">
+                  <button type="button" id="run-gates-btn" class="btn btn-primary">
+                    Run Selected Gates
+                  </button>
+                  <button type="button" id="ai-fix-btn" class="btn btn-secondary">
+                    Send Last Failure to AI Fixer
+                  </button>
+                </div>
+              </div>
+
+              <fieldset class="gate-fieldset">
+                <legend>Select gates to execute</legend>
+                <div class="checkbox-grid">
+                  <label class="check-item"><input type="checkbox" name="gate" value="hygiene" checked> Hygiene Check (Cyrillic &amp; Secrets)</label>
+                  <label class="check-item"><input type="checkbox" name="gate" value="backend_lint" checked> Backend Lint (ruff check &amp; format)</label>
+                  <label class="check-item"><input type="checkbox" name="gate" value="backend_tests" checked> Backend Tests (pytest + testcontainers)</label>
+                  <label class="check-item"><input type="checkbox" name="gate" value="frontend_checks"> Frontend Typecheck &amp; Vitest</label>
+                  <label class="check-item"><input type="checkbox" name="gate" value="openapi_lint"> OpenAPI Redocly Lint</label>
+                  <label class="check-item"><input type="checkbox" name="gate" value="openapi_sync"> Regenerate Frontend API Client</label>
+                  <label class="check-item"><input type="checkbox" name="gate" value="ai_sdlc_tests"> AI SDLC Workbench Tests</label>
+                </div>
+              </fieldset>
+
+              <div id="gates-output" class="gates-list"></div>
+            </article>
+          </div>
+
+          <div role="tabpanel" id="panel-git" aria-labelledby="tab-git" class="tabpanel" hidden>
+            <div class="stages-stack">
+              <article class="card">
+                <div class="row-between wrap-gap">
+                  <div>
+                    <h3>Stage 6a — Independent AI Code Review (10-Point Checklist)</h3>
+                    <p class="muted">Audits your <code>git diff HEAD</code> against <code>.agents/roles/reviewer.md</code>.</p>
+                  </div>
+                  <button type="button" class="btn btn-primary stage-btn" data-stage="review">
+                    Run AI Reviewer
+                  </button>
+                </div>
+                <pre id="out-review" class="code-box" role="region" aria-label="AI Reviewer findings" tabindex="0"><code>(not executed yet)</code></pre>
+              </article>
+
+              <article class="card">
+                <h3>Stage 6b — Feature Branch, Trailers Commit &amp; Pull Request</h3>
+                <div class="git-actions-grid">
+                  <form id="branch-form" class="mini-form">
+                    <div class="field">
+                      <label for="branch-name">1. Feature branch name</label>
+                      <input type="text" id="branch-name" name="branch_name" required placeholder="feat/33-my-feature">
+                    </div>
+                    <button type="submit" class="btn btn-secondary">Create &amp; Switch Branch</button>
+                  </form>
+
+                  <form id="commit-form" class="mini-form">
+                    <div class="field">
+                      <label for="commit-msg">2. Conventional commit summary</label>
+                      <input type="text" id="commit-msg" name="message" required placeholder="feat: implement feature">
+                    </div>
+                    <div class="field">
+                      <label for="commit-role">Agent trailer role</label>
+                      <select id="commit-role" name="agent_role">
+                        <option value="backend-agent">backend-agent</option>
+                        <option value="frontend-agent">frontend-agent</option>
+                        <option value="qa-agent">qa-agent</option>
+                        <option value="devops-agent">devops-agent</option>
+                        <option value="spec-agent">spec-agent</option>
+                      </select>
+                    </div>
+                    <button type="submit" class="btn btn-secondary">Commit All with Trailers</button>
+                  </form>
+
+                  <form id="pr-form" class="mini-form">
+                    <div class="field">
+                      <label for="pr-title">3. Pull Request title</label>
+                      <input type="text" id="pr-title" name="title" required placeholder="feat: add capability (#33)">
+                    </div>
+                    <label class="check-item">
+                      <input type="checkbox" id="pr-close-issue" name="close_issue" checked>
+                      Include "Closes #N" (uncheck for human-gated infra PRs)
+                    </label>
+                    <button type="submit" class="btn btn-primary">Push Branch &amp; Create PR</button>
+                  </form>
+                </div>
+                <pre id="out-git" class="code-box" role="region" aria-label="Git working tree status" tabindex="0"><code>Loading git status...</code></pre>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="settings-dialog" closedby="any" aria-labelledby="settings-title">
+    <form id="settings-form" class="dialog-form">
+      <div class="row-between">
+        <h2 id="settings-title">LLM API Settings</h2>
+        <button type="submit" formmethod="dialog" formnovalidate class="btn btn-ghost">Close</button>
+      </div>
+      <p class="hint">
+        Keys entered here are stored exclusively in git-ignored <code>.local/ai-sdlc/config.json</code>
+        and are never committed or returned raw in API responses.
+      </p>
+
+      <div class="field">
+        <label for="cfg-provider">LLM Provider</label>
+        <select id="cfg-provider" name="llm_provider">
+          <option value="gemini">Google Gemini API (Free AI Studio key)</option>
+          <option value="openai">OpenAI-Compatible API (OpenAI / OpenRouter / Ollama)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="cfg-model">Model ID</label>
+        <input type="text" id="cfg-model" name="llm_model" required value="gemini-2.5-flash" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label for="cfg-base-url">OpenAI-Compatible Base URL (ignored for Gemini)</label>
+        <input type="url" id="cfg-base-url" name="openai_base_url" value="https://api.openai.com/v1" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label for="cfg-api-key">API Key (leave blank to keep existing key)</label>
+        <div class="key-row">
+          <input type="password" id="cfg-api-key" name="api_key" autocomplete="off" aria-describedby="cfg-key-hint">
+          <button type="button" id="toggle-key-visibility" class="btn btn-secondary" aria-pressed="false">
+            Show
+          </button>
+        </div>
+        <span id="cfg-key-hint" class="hint">Saved key: none</span>
+      </div>
+
+      <div class="btn-group">
+        <button type="submit" class="btn btn-primary">Save Settings</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
