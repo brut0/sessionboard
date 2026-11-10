@@ -10,9 +10,9 @@ Your job is to find the root cause in the current `main` and fix it so that the 
 
 ## Procedure
 1. Read the runbook and the context. Form one hypothesis from the stack traces and the diff.
-2. Write a regression test in `backend/tests/` that reproduces the failure (or un-skip a skipped test that covers it). Run `cd backend && uv run pytest -q` and confirm it fails for the expected reason.
+2. Write a regression test in `backend/tests/` that reproduces the failure (or un-skip a skipped test that covers it). Run `cd backend && OTEL_SDK_DISABLED=true uv run pytest -q` and confirm it fails for the expected reason.
 3. Make the smallest code change in `backend/app/` that fixes the root cause. Follow `AGENTS.md` rules (time math in minutes since midnight; domain layer pure).
-4. Run `cd backend && uv run pytest -q` until everything passes. Docker is available for integration tests.
+4. Run `cd backend && uv run ruff check . && uv run ruff format . && OTEL_SDK_DISABLED=true uv run pytest -q` until lint, formatting, and all tests pass. Docker is available for integration tests.
 5. Write `incident/summary.md`: root cause (1–3 sentences), fix, test added. This file is used as the PR body.
 
 ## Constraints

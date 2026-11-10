@@ -38,13 +38,13 @@ This table guides peer reviewers directly to the evidence for every grading crit
 | **3** | **Agent Team Specification** | **2 pts** | ✅ | [`docs/agents/team.md`](docs/agents/team.md) + 8 role prompts in [`.agents/roles/`](.agents/roles/) + 4 workflow skills in [`.agents/skills/`](.agents/skills/) + dispatch matrix in [`docs/plan/EXECUTION_GUIDE.md` §3.5](docs/plan/EXECUTION_GUIDE.md) |
 | **4** | **Context Management** | **2 pts** | ✅ | [`AGENTS.md`](AGENTS.md) entry point linking modular docs: [`docs/process.md`](docs/process.md), [`docs/agents/team.md`](docs/agents/team.md), [`docs/architecture.md`](docs/architecture.md), [`docs/testing.md`](docs/testing.md), [`docs/deployment.md`](docs/deployment.md), [`docs/ai-sdlc.md`](docs/ai-sdlc.md), [`docs/adr/`](docs/adr/), [`specs/`](specs/) |
 | **5** | **Application (Full-Stack + DB)** | **2 pts** | ✅ | React 19 SPA (`DayBoard`, `BookingModal`, `DirectoryPage`) ↔ FastAPI REST API ↔ PostgreSQL 16 with `pg_advisory_xact_lock` (Issues [`#2`–`#11`](https://github.com/brut0/sessionboard/issues), PRs `#18`–`#27`) |
-| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **59 core app tests passing** (44 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract + zero-PII telemetry tests, 15 frontend Vitest/RTL/MSW tests) + **39 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`, `#15`](https://github.com/brut0/sessionboard/issues)) |
+| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **64 core app tests passing** (49 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract + zero-PII telemetry + alerting/probe tests, 15 frontend Vitest/RTL/MSW tests) + **39 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`, `#15`, `#16`](https://github.com/brut0/sessionboard/issues)) |
 | **7** | **Containerization** | **2 pts** | ✅ | Multi-stage [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) (`db` + `app` + `otel-lgtm`) + companion [`tools/ai-sdlc/Dockerfile`](tools/ai-sdlc/Dockerfile) (`--profile sdlc`, Issue [`#2`](https://github.com/brut0/sessionboard/issues/2), PR `#18`) |
 | **8** | **Deployment** | **2 pts** | ✅ | Live on Render Free + isolated Neon PostgreSQL 16 DBs: [`sessionboard-dev`](https://sessionboard-dev.onrender.com), [`sessionboard-prod`](https://sessionboard-prod.onrender.com), and owner-gated companion [`essionboard-ai-sdlc`](https://essionboard-ai-sdlc.onrender.com) (`401` unauthenticated); see [`docs/deployment.md` §7](docs/deployment.md#7-live-verification--rollback-evidence-phase-7-gate) (Issue [`#14`](https://github.com/brut0/sessionboard/issues/14)) |
 | **9** | **CI/CD (PR CI → Auto Dev → Manual Prod + Rollback)** | **3 pts** | ✅ | Enforced `ci.yml` branch protection + `cd-dev.yml` (`ghcr.io/brut0/sessionboard*`) + owner-approved [`deploy-prod.yml` #42887628791](https://github.com/brut0/sessionboard/actions/runs/42887628791) + verified [`rollback.yml` #42887682401](https://github.com/brut0/sessionboard/actions/runs/42887682401) + [`synthetic-probe.yml` #42887575404](https://github.com/brut0/sessionboard/actions/runs/42887575404) ([`docs/deployment.md`](docs/deployment.md), Issues [`#13`, `#14`](https://github.com/brut0/sessionboard/issues/13)) |
 | **10** | **Observability (Traces + Metrics + Logs, Zero PII)** | **2 pts** | 🚧 *Phase 8 (Local Verified — Cloud OTLP Pending)* | OpenTelemetry traces (`booking.create`), Prometheus/Mimir SLIs (`sessionboard_bookings_total`, `sessionboard_booking_duration_seconds`), structured JSON logs with shared `trace_id`, [`test_telemetry_no_pii.py`](backend/tests/integration/test_telemetry_no_pii.py), [`ops/grafana/dashboard.json`](ops/grafana/dashboard.json), and [`docs/observability.md`](docs/observability.md) screenshots verified on `otel-lgtm`; awaiting Render OTLP env toggle (`OTEL_SDK_DISABLED=false`) for live Grafana Cloud verification (Issue [`#15`](https://github.com/brut0/sessionboard/issues/15)) |
-| **11** | **Alerting on User Impact** | **1 pt** | 🔜 *Phase 9* | Grafana alert `BookingErrorRatioHigh` (`error / total > 20%` over 5m when `B >= 3`) on real booking failures, not CPU graphs (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
-| **12** | **On-Call Responder Agent** | **2 pts** | 🔜 *Phase 9* | `oncall.yml` woken via Grafana webhook `repository_dispatch`: opens `[incident]` issue, triggers deterministic rollback, and runs headless **Gemini CLI** to open a regression-tested fix PR (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
+| **11** | **Alerting on User Impact** | **1 pt** | 🚧 *Phase 9 (Config Ready — Cloud Rule Pending)* | Grafana alert rule [`BookingErrorRatioHigh`](ops/grafana/alert-rule.json) (`B >= 3 AND A / B > 0.2` over 5m), webhook template [`contact-point-payload.tmpl`](ops/grafana/contact-point-payload.tmpl), and `:45/+30m` burst probe [`synthetic_probe.py`](scripts/synthetic_probe.py) ready; awaiting Grafana Cloud alert setup (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
+| **12** | **On-Call Responder Agent** | **2 pts** | 🚧 *Phase 9 (Workflow Ready — Drill Pending)* | [`oncall.yml`](.github/workflows/oncall.yml) + [`docs/runbooks/booking-errors.md`](docs/runbooks/booking-errors.md): Grafana webhook `repository_dispatch` opens `[incident]` issue, rolls back `dev` via `rollback.yml`, and runs headless **Gemini CLI** to open an auto-merging fix PR; awaiting dry-run & chaos drill (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
 
 ---
 
@@ -289,13 +289,13 @@ sessionboard/
 │   │   ├── domain/                  # Pure scheduling domain (zero SQLAlchemy/FastAPI imports)
 │   │   ├── routers/                 # /api/specialists, /api/clients, /api/rooms, /api/sessions
 │   │   └── {config,db,logging_config,models,schemas,seed,telemetry,main}.py
-│   └── tests/                       # Unit + testcontainers PostgreSQL integration + contract + zero-PII tests (44 tests)
+│   └── tests/                       # Unit + testcontainers PostgreSQL integration + contract + zero-PII tests (49 tests)
 ├── frontend/
 │   ├── src/
 │   │   ├── api/                     # Generated schema.d.ts (openapi-typescript) + openapi-fetch client
 │   │   └── components/              # DayBoard, BookingModal, DirectoryPage + Vitest/RTL/MSW tests (15 tests)
 ├── ops/
-│   └── grafana/                     # SessionBoard Booking Observability dashboard (dashboard.json)
+│   └── grafana/                     # dashboard.json, alert-rule.json, contact-point-payload.tmpl
 ├── specs/
 │   ├── constitution.md              # Stack locks, architectural invariants & global DoD
 │   ├── product-spec.md              # User stories US-1..US-4, BR-1..BR-9 & 16 ACs
@@ -307,6 +307,7 @@ sessionboard/
 │   ├── architecture.md              # Detailed system architecture, sequences & state machine
 │   ├── architecture-explorer.html   # Standalone interactive Archify-style diagram explorer
 │   ├── observability.md             # OTel trace -> log -> metric correlation guide & Grafana screenshots
+│   ├── runbooks/                    # Operational incident runbooks (booking-errors.md)
 │   ├── images/                      # Verified Grafana dashboard & Tempo/Loki trace screenshots
 │   ├── testing.md                   # Multi-layer test strategy & AC-1.1..AC-4.2 traceability matrix
 │   ├── deployment.md                # Environments, expand-contract migrations, CD & rollback runbook
@@ -323,7 +324,7 @@ sessionboard/
 ├── .github/
 │   ├── ISSUE_TEMPLATE/task.yml      # Spec-backed task template with AC checkboxes
 │   ├── pull_request_template.md     # PR checklist template
-│   └── workflows/                   # ci.yml, cd-dev.yml, deploy-prod.yml, rollback.yml, synthetic-probe.yml
+│   └── workflows/                   # ci.yml, cd-dev.yml, deploy-prod.yml, rollback.yml, synthetic-probe.yml, oncall.yml
 └── scripts/
     ├── check_repo_hygiene.py        # Automated English-only & clean-room guard
     ├── synthetic_probe.py           # Zero-dependency synthetic booking smoke/burst probe

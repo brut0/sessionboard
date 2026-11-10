@@ -1,0 +1,91 @@
+{
+  "apiVersion": 1,
+  "title": "BookingErrorRatioHigh",
+  "ruleGroup": "sessionboard-sli",
+  "folderUID": "sessionboard-alerts",
+  "condition": "C",
+  "for": "2m",
+  "intervalSeconds": 60,
+  "noDataState": "OK",
+  "execErrState": "OK",
+  "labels": {
+    "service": "sessionboard",
+    "env": "dev",
+    "severity": "page"
+  },
+  "annotations": {
+    "summary": "Booking 5xx error ratio exceeded 20 percent on dev over 5m (B >= 3 and A / B > 0.2)",
+    "runbook_url": "https://github.com/brut0/sessionboard/blob/main/docs/runbooks/booking-errors.md"
+  },
+  "data": [
+    {
+      "refId": "A",
+      "queryType": "",
+      "relativeTimeRange": {
+        "from": 300,
+        "to": 0
+      },
+      "datasourceUid": "${datasource_prom}",
+      "model": {
+        "editorMode": "code",
+        "expr": "(sum(increase(sessionboard_bookings_total{env=\"dev\",result=\"error\"}[5m])) or vector(0))",
+        "instant": true,
+        "legendFormat": "errors",
+        "range": false,
+        "refId": "A"
+      }
+    },
+    {
+      "refId": "B",
+      "queryType": "",
+      "relativeTimeRange": {
+        "from": 300,
+        "to": 0
+      },
+      "datasourceUid": "${datasource_prom}",
+      "model": {
+        "editorMode": "code",
+        "expr": "sum(increase(sessionboard_bookings_total{env=\"dev\"}[5m]))",
+        "instant": true,
+        "legendFormat": "total",
+        "range": false,
+        "refId": "B"
+      }
+    },
+    {
+      "refId": "C",
+      "queryType": "",
+      "relativeTimeRange": {
+        "from": 300,
+        "to": 0
+      },
+      "datasourceUid": "__expr__",
+      "model": {
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "C"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "last"
+            },
+            "type": "query"
+          }
+        ],
+        "expression": "$B >= 3 && ($A / $B) > 0.2",
+        "refId": "C",
+        "type": "math"
+      }
+    }
+  ]
+}
