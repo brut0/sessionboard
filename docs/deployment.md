@@ -12,7 +12,7 @@
 | **local** | Feature development & tests | `http://localhost:8000` (optional companion workbench `http://127.0.0.1:8090` via `--profile sdlc`) | Local Docker Compose `db` (Postgres 16) | `docker compose up --build` (or `--profile sdlc up --build`) | None locally (`ai-sdlc` supports optional `SDLC_REQUIRE_AUTH=true`) |
 | **dev** | Continuous integration & smoke validation | `https://sessionboard-dev.onrender.com` | Neon Serverless Postgres (`sessionboard-dev`) | Automated on every push to `main` via `cd-dev.yml` | None (core app is public studio demo; zero PII) |
 | **prod** | Production studio scheduling | `https://sessionboard-prod.onrender.com` | Neon Serverless Postgres (`sessionboard-prod`) | Manual dispatch via `deploy-prod.yml` with target `sha` | Owner approval via GitHub `production` environment |
-| **ai-sdlc (companion)** | Isolated owner-only AI SDLC workbench | `https://sessionboard-ai-sdlc.onrender.com` (optional) | None (stateless + ephemeral git clone via `SDLC_CLONE_REPO_URL`) | Automated push to `main` via `cd-dev.yml` (`build-and-push-ai-sdlc` + `deploy-ai-sdlc`) | **Strictly Owner-Only (`SDLC_REQUIRE_AUTH=true`)**: fail-closed `503` if password missing, `401` + signed `__Host-sdlc_session` cookie + `429` rate limiter |
+| **ai-sdlc (companion)** | Isolated owner-only AI SDLC workbench | `https://essionboard-ai-sdlc.onrender.com` (optional) | None (stateless + ephemeral git clone via `SDLC_CLONE_REPO_URL`) | Automated push to `main` via `cd-dev.yml` (`build-and-push-ai-sdlc` + `deploy-ai-sdlc`) | **Strictly Owner-Only (`SDLC_REQUIRE_AUTH=true`)**: fail-closed `503` if password missing, `401` + signed `__Host-sdlc_session` cookie + `429` rate limiter |
 
 ---
 
@@ -144,3 +144,17 @@ Because Render requires an existing container image to configure a service, foll
      - `AI_SDLC_URL` (e.g. `https://sessionboard-ai-sdlc.onrender.com`, optional)
 6. **Configure Production Environment:**
    - Settings → Environments → New environment `production` → Add required reviewer: Owner account (`brut0`).
+
+---
+
+## 7. Live Verification & Rollback Evidence (Phase 7 Gate)
+
+| Verification Item | Live Endpoint / Workflow Run | Verified Output |
+|---|---|---|
+| **Dev Service (`sessionboard-dev`)** | `https://sessionboard-dev.onrender.com` ([Neon `sessionboard-dev`](https://neon.tech)) | `/api/health` → `{"status":"ok","db":"ok"}`; `/api/version` → `3f0d5cd055f4c23f5b326964598b59ba9dac7095` (`env: "dev"`) |
+| **Prod Service (`sessionboard-prod`)** | `https://sessionboard-prod.onrender.com` ([Neon `sessionboard-prod`](https://neon.tech)) | `/api/health` → `{"status":"ok","db":"ok"}`; `/api/version` → `3f0d5cd055f4c23f5b326964598b59ba9dac7095` (`env: "prod"`) |
+| **Companion AI SDLC Workbench** | `https://essionboard-ai-sdlc.onrender.com` | `/api/health` → `{"status":"ok","version":"3f0d5cd...","auth_required":true,"auth_configured":true,"authenticated":false,"workspace_ready":true}`; `GET /api/config` → `HTTP 401` |
+| **Manual Prod Promotion + Reviewer Gate** | [`deploy-prod.yml` #42887628791](https://github.com/brut0/sessionboard/actions/runs/42887628791) | Approved by `brut0` via `production` environment; deployed `3f0d5cd...` (`success`) |
+| **Real Rollback Drill (`dev` → `f73bafa`)** | [`rollback.yml` #42887682401](https://github.com/brut0/sessionboard/actions/runs/42887682401) | Rolled `dev` back to `f73bafab66114d51d2a7b661cdf93d15151c777f` in 1m25s; `/api/version` confirmed rolled-back SHA |
+| **Roll Forward (`dev` → `3f0d5cd`)** | [`rollback.yml` #42888034418](https://github.com/brut0/sessionboard/actions/runs/42888034418) | Restored `dev` to `3f0d5cd055f4c23f5b326964598b59ba9dac7095` in 1m24s (`success`) |
+| **Synthetic Probe (`once` on `dev`)** | [`synthetic-probe.yml` #42887575404](https://github.com/brut0/sessionboard/actions/runs/42887575404) | `3/3 successful lifecycles` against live Render Dev + Neon PostgreSQL 16 (`success`) |

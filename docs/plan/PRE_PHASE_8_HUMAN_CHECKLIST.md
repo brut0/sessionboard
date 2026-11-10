@@ -1,5 +1,6 @@
 # Pre-Phase-8 Human Action Checklist (Cloud Bootstrap, Phase 7 Gate & Grafana Cloud Prep)
 
+> **Status:** **Complete (Parts A, B, and C verified — ready for Phase 8 / Issue #15)**
 > **Purpose:** Complete step-by-step instructions for every external cloud account, package visibility setting, Render/Neon resource, GitHub secret/variable, live verification run, and Grafana Cloud OTLP setup required from the current state (post-PR #31) up to starting **Phase 8 (Observability — Issue #15)**.
 > **Cost:** **$0.00** (no credit card required for Neon Free, Render Free, GitHub Public/GHCR, Grafana Cloud Free, or Google AI Studio Free).
 
@@ -223,12 +224,12 @@ While logged in / setting up keys:
 
 | # | Check | Done? |
 |---|---|---|
-| 1 | `ghcr.io/brut0/sessionboard` package visibility = **Public** | [ ] |
-| 2 | Neon `sessionboard-dev` & `sessionboard-prod` created (Postgres 16, Frankfurt, **non-pooler URLs**) | [ ] |
-| 3 | Render `sessionboard-dev` & `sessionboard-prod` live (`/api/health` → `200 ok`) | [ ] |
-| 3b | *(Optional companion)* Render `sessionboard-ai-sdlc` live with `SDLC_REQUIRE_AUTH=true` & strong `SDLC_OWNER_PASSWORD` (`GET /api/config` → `401`) | [ ] |
-| 4 | GitHub Secrets (`RENDER_DEPLOY_HOOK_DEV`, `RENDER_DEPLOY_HOOK_PROD`, optional `RENDER_DEPLOY_HOOK_AI_SDLC`) & Variables (`DEV_URL`, `PROD_URL`, optional `AI_SDLC_URL`) set | [ ] |
-| 5 | GitHub Environment `production` created with required reviewer `brut0` | [ ] |
-| 6 | `deploy-prod.yml` approved & green; `rollback.yml` run green on `dev` + URL saved | [ ] |
-| 7 | Issue `#1` Phase 7 Gate marked `PASS` & Issue `#14` closed | [ ] |
-| 8 | Grafana Cloud stack (EU) + OTLP endpoint & `Basic%20...` header token ready | [ ] |
+| 1 | `ghcr.io/brut0/sessionboard` (& `sessionboard-ai-sdlc`) package visibility = **Public** | [x] |
+| 2 | Neon `sessionboard-dev` & `sessionboard-prod` created (Postgres 16, Frankfurt, **non-pooler URLs**) | [x] |
+| 3 | Render `sessionboard-dev` & `sessionboard-prod` live (`/api/health` → `200 ok`) | [x] |
+| 3b | *(Optional companion)* Render `https://essionboard-ai-sdlc.onrender.com` live with `SDLC_REQUIRE_AUTH=true` & strong `SDLC_OWNER_PASSWORD` (`GET /api/config` → `401`) | [x] |
+| 4 | GitHub Secrets (`RENDER_DEPLOY_HOOK_DEV`, `RENDER_DEPLOY_HOOK_PROD`, `RENDER_DEPLOY_HOOK_AI_SDLC`) & Variables (`DEV_URL`, `PROD_URL`, `AI_SDLC_URL`) set | [x] |
+| 5 | GitHub Environment `production` created with required reviewer `brut0` | [x] |
+| 6 | `deploy-prod.yml` approved (`#42887628791`); `rollback.yml` run green on `dev` (`#42887682401` / `#42888034418`); `synthetic-probe.yml` green (`#42887575404`) | [x] |
+| 7 | Issue `#1` Phase 7 Gate marked `PASS` & Issue `#14` closed | [x] |
+| 8 | Grafana Cloud stack (EU) + OTLP endpoint & `Basic%20...` header token ready | [x] |
