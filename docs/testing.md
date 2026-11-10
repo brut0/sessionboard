@@ -11,8 +11,8 @@ SessionBoard enforces a multi-layered automated testing pyramid:
 
 | Layer | Directory | Framework & Environment | Purpose & Scope |
 |---|---|---|---|
-| **Unit (Domain)** | `backend/tests/unit/` | `pytest` (pure in-memory Python 3.12) | Interval arithmetic (`time_utils.py`), overflow math, studio working hours (08:00–20:00), 15-minute granularity, and multi-resource conflict detection (`conflicts.py`). |
-| **Integration** | `backend/tests/integration/` | `pytest` + `testcontainers` (PostgreSQL 16) | Tests all 16 Acceptance Criteria against a real PostgreSQL 16 database running Alembic migrations. Verifies advisory lock serialization, constraints, cascading rules, and REST status codes. |
+| **Unit (Domain & Telemetry)** | `backend/tests/unit/` | `pytest` (pure in-memory Python 3.12) | Interval arithmetic (`time_utils.py`), overflow math, studio working hours (08:00–20:00), 15-minute granularity, multi-resource conflict detection (`conflicts.py`), plus `JsonLogFormatter`, OTLP endpoint normalization, and Grafana dashboard assertions (`test_logging_and_telemetry.py`). |
+| **Integration** | `backend/tests/integration/` | `pytest` + `testcontainers` (PostgreSQL 16) | Tests all 16 Acceptance Criteria against a real PostgreSQL 16 database running Alembic migrations, plus end-to-end zero-PII OTel span/metric/log correlation (`test_telemetry_no_pii.py`). |
 | **Contract** | `backend/tests/integration/test_openapi_contract.py` | `pytest` + `PyYAML` | Verifies that FastAPI's generated `app.openapi()` matches `specs/api/openapi.yaml` in routes, HTTP methods, operation IDs, and declared response status codes. |
 | **Frontend** | `frontend/src/**/*.test.tsx` | `vitest` + `jsdom` + `@testing-library/react` + `msw` | Component rendering, tab switching (Day Board / Directory), room column grouping, 15-min booking modal, 409 conflict banners, 500 Trace ID display, and status transitions. |
 

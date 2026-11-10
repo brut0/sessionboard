@@ -236,7 +236,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-          "expr": "{service_name=\"sessionboard\", env=~\"$env\"} | json",
+          "expr": "{service_name=\"sessionboard\"} | json | env=~\"$env\"",
           "refId": "A"
         }
       ],

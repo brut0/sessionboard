@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import sys
@@ -55,6 +56,23 @@ class JsonLogFormatter(logging.Formatter):
         return json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
 
 
+class SanitizingOtelLoggingHandler(LoggingHandler):
+    """OTel LoggingHandler that strips exc_info/stack_info before OTLP translation."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.exc_info or record.exc_text or record.stack_info:
+            sanitized = copy.copy(record)
+            if sanitized.exc_info and sanitized.exc_info[0] is not None:
+                if not hasattr(sanitized, "error.type"):
+                    setattr(sanitized, "error.type", sanitized.exc_info[0].__name__)
+            sanitized.exc_info = None
+            sanitized.exc_text = None
+            sanitized.stack_info = None
+            super().emit(sanitized)
+            return
+        super().emit(record)
+
+
 def configure_logging(
     *,
     env: str,
@@ -88,7 +106,7 @@ def configure_logging(
     managed_handlers.append(stream_handler)
 
     if logger_provider is not None:
-        otel_handler = LoggingHandler(
+        otel_handler = SanitizingOtelLoggingHandler(
             level=level,
             logger_provider=logger_provider,
             log_code_attributes=False,

@@ -4,6 +4,8 @@ import json
 import logging
 from pathlib import Path
 
+import pytest
+
 from app.logging_config import JsonLogFormatter
 from app.telemetry import build_otlp_signal_endpoint
 
@@ -86,4 +88,38 @@ def test_grafana_dashboard_json_defines_sli_panels() -> None:
     raw_queries = json.dumps(panels)
     assert "sessionboard_bookings_total" in raw_queries
     assert "sessionboard_booking_duration_seconds_bucket" in raw_queries
-    assert '{service_name=\\"sessionboard\\"' in raw_queries or "service_name" in raw_queries
+    assert '{service_name=\\"sessionboard\\"} | json | env=~\\"$env\\"' in raw_queries
+
+
+def test_sanitizing_otel_handler_strips_exc_info_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "false")
+    from opentelemetry.sdk._logs import LoggerProvider
+    from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, SimpleLogRecordProcessor
+
+    from app.logging_config import configure_logging, teardown_logging_handlers
+
+    exporter = InMemoryLogRecordExporter()
+    provider = LoggerProvider()
+    provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+    handlers = configure_logging(env="test", logger_provider=provider)
+    try:
+        logger = logging.getLogger("app.test_sanitizing")
+        try:
+            raise RuntimeError("secret-dsn postgresql://u:p@host/db PII-CANARY-9999")
+        except RuntimeError:
+            logger.exception("Failure occurred", extra={"event": "test.failure"})
+    finally:
+        teardown_logging_handlers(handlers)
+        provider.shutdown()
+
+    records = exporter.get_finished_logs()
+    assert len(records) >= 1
+    serialized = json.dumps(
+        [
+            {"body": rec.log_record.body, "attributes": dict(rec.log_record.attributes or {})}
+            for rec in records
+        ]
+    )
+    assert "PII-CANARY-9999" not in serialized
+    assert "secret-dsn" not in serialized
+    assert records[0].log_record.attributes.get("error.type") == "RuntimeError"

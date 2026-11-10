@@ -22,7 +22,7 @@ Every HTTP response (including `201`, `409`, `422`, `404`, and `500`) carries an
 
 ## 2. Finding Correlated Trace → Logs → Metrics
 
-1. **Trigger or observe a booking in SessionBoard** (for example via the Booking Modal or `curl -i http://localhost:8000/api/sessions`), and copy the `X-Trace-Id` response header (in the example below: `34aeca068a9a2ba5ccefd681d41cb278`).
+1. **Trigger or observe a booking in SessionBoard** (for example via the Booking Modal or `curl -i -X POST http://localhost:8000/api/sessions -H "Content-Type: application/json" -d '{"specialist_id":1,"client_id":1,"room_id":1,"session_date":"2026-11-11","start_time":"11:00","duration_minutes":30}'`), and copy the `X-Trace-Id` response header (in the example below: `34aeca068a9a2ba5ccefd681d41cb278`).
 2. **Inspect the Distributed Trace (Tempo):**
    - Open **Grafana → Explore → Tempo** (locally `http://localhost:3000/explore`, or Grafana Cloud Explore).
    - Search by Trace ID `34aeca068a9a2ba5ccefd681d41cb278`.
