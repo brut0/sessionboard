@@ -37,6 +37,7 @@ gh pr create --title "<type>: <summary> (#<N>)" --body-file .pr-body.md --label 
 ```
 `.pr-body.md` follows `.github/pull_request_template.md` and must contain `Closes #<N>`, the AC checklist
 (all checked), tests added, spec/contract changes, and the gate output. Delete `.pr-body.md` after use (never commit it).
+- **Human-gated infra rule:** For tasks whose final gate requires human cloud actions after code merges (e.g., Render/Neon setup in #14 or Grafana setup in #15/#16), use `Refs #<N>` in the workflow PR body instead of `Closes #<N>` so the issue remains `OPEN` until live verification passes.
 
 ## 4. Finish
 ```bash

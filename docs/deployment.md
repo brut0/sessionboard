@@ -89,6 +89,8 @@ Rollbacks in SessionBoard are designed to be instant and zero-downtime. To achie
 
 ## 6. Human Bootstrap Guide (Initial Setup)
 
+> 👉 **Complete Pre-Phase-8 Checklist:** See [`docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md`](plan/PRE_PHASE_8_HUMAN_CHECKLIST.md) for every click-by-click step covering GHCR, Neon, Render, GitHub secrets/environments, the rollback gate verification, and Grafana Cloud OTLP preparation.
+
 Because Render requires an existing container image to configure a service, follow this chicken-and-egg sequence:
 
 1. **Push initial image:**

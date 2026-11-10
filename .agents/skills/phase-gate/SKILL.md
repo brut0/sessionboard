@@ -16,6 +16,7 @@ Never claim "done" without running the commands below and quoting their output. 
 | `python scripts/check_repo_hygiene.py` | `OK` and exit code 0 |
 | `make lint` (from Phase 3) | exit code 0 |
 | `make test` (from Phase 4) | all tests pass, 0 failed, 0 errors |
+| `README.md` sync check (at phase boundary) | Rubric checklist table (`✅`/`🚧`/`🔜`), test counts, live links, and repository structure map match verified state on `main` |
 
 ## Per phase
 | Phase | Commands | Expected |

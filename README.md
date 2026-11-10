@@ -13,7 +13,7 @@
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-Grafana_LGTM-F46800?style=for-the-badge&logo=grafana&logoColor=white)](specs/nfr-observability.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 
-[**📖 Product Spec**](specs/product-spec.md) · [**🔌 OpenAPI 3.1 Contract**](specs/api/openapi.yaml) · [**🏛️ Architecture & ADRs**](docs/architecture.md) · [**🧭 Interactive Archify Explorer (`HTML`)**](docs/architecture-explorer.html) · [**🤖 Agent Team**](docs/agents/team.md) · [**📋 Public Issue Tracker**](https://github.com/brut0/sessionboard/issues)
+[**📖 Product Spec**](specs/product-spec.md) · [**🔌 OpenAPI 3.1 Contract**](specs/api/openapi.yaml) · [**🏛️ Architecture & ADRs**](docs/architecture.md) · [**🧭 Interactive Archify Explorer (`HTML`)**](docs/architecture-explorer.html) · [**🧪 Testing**](docs/testing.md) · [**🚀 Deployment**](docs/deployment.md) · [**🛠️ Dual AI SDLC**](docs/ai-sdlc.md) · [**🤖 Agent Team**](docs/agents/team.md) · [**📋 Public Issue Tracker**](https://github.com/brut0/sessionboard/issues)
 
 </div>
 
@@ -35,13 +35,13 @@ This table guides peer reviewers directly to the evidence for every grading crit
 |---:|---|---:|:---:|---|
 | **1** | **Problem Description** | **2 pts** | ✅ | [§1 Problem & Expected Behavior](#-1-problem-description--expected-behavior) below + [`specs/product-spec.md` §1](specs/product-spec.md#1-problem-statement--personas) |
 | **2** | **Product Specification & Public Task Tracker** | **2 pts** | ✅ | [`specs/constitution.md`](specs/constitution.md), [`specs/product-spec.md`](specs/product-spec.md) (16 Given/When/Then ACs), [`specs/tasks.md`](specs/tasks.md), and public [GitHub Issues `#1`–`#17`](https://github.com/brut0/sessionboard/issues) with agent start/finish logs |
-| **3** | **Agent Team Specification** | **2 pts** | ✅ | [`docs/agents/team.md`](docs/agents/team.md) + 8 role prompts in [`.agents/roles/`](.agents/roles/) + 3 workflow skills in [`.agents/skills/`](.agents/skills/) + dispatch matrix in [`docs/plan/EXECUTION_GUIDE.md` §3.5](docs/plan/EXECUTION_GUIDE.md) |
-| **4** | **Context Management** | **2 pts** | ✅ | [`AGENTS.md`](AGENTS.md) entry point linking modular docs: [`docs/process.md`](docs/process.md), [`docs/agents/team.md`](docs/agents/team.md), [`docs/architecture.md`](docs/architecture.md), [`docs/adr/`](docs/adr/), [`specs/`](specs/) |
-| **5** | **Application (Full-Stack + DB)** | **2 pts** | 🔜 *Phase 3–5* | React 19 SPA ↔ FastAPI REST API ↔ PostgreSQL 16 (Issues [`#2`–`#11`](https://github.com/brut0/sessionboard/issues)) |
-| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | 🔜 *Phase 4–5* | Pure domain unit tests + `testcontainers` PostgreSQL integration tests (`test_ac_*`) + OpenAPI contract test + Vitest/RTL/MSW via `make test` (Issues [`#4`, `#7`, `#12`](https://github.com/brut0/sessionboard/issues)) |
-| **7** | **Containerization** | **2 pts** | 🔜 *Phase 3* | Multi-stage `Dockerfile` + `docker-compose.yml` (`db` + `app` + `otel-lgtm`) started with `docker compose up --build` / `make up` (Issue [`#2`](https://github.com/brut0/sessionboard/issues/2)) |
-| **8** | **Deployment** | **2 pts** | 🔜 *Phase 7* | Public `dev` and `prod` services on Render Free backed by two isolated Neon PostgreSQL 16 projects (Issue [`#14`](https://github.com/brut0/sessionboard/issues/14)) |
-| **9** | **CI/CD (PR CI → Auto Dev → Manual Prod + Rollback)** | **3 pts** | 🔜 *Phase 6–7* | `ci.yml` (PR checks) → `cd-dev.yml` (auto deploy to dev) → `deploy-prod.yml` (manual approval on `production` environment) + `rollback.yml` (Issues [`#13`, `#14`](https://github.com/brut0/sessionboard/issues/13)) |
+| **3** | **Agent Team Specification** | **2 pts** | ✅ | [`docs/agents/team.md`](docs/agents/team.md) + 8 role prompts in [`.agents/roles/`](.agents/roles/) + 4 workflow skills in [`.agents/skills/`](.agents/skills/) + dispatch matrix in [`docs/plan/EXECUTION_GUIDE.md` §3.5](docs/plan/EXECUTION_GUIDE.md) |
+| **4** | **Context Management** | **2 pts** | ✅ | [`AGENTS.md`](AGENTS.md) entry point linking modular docs: [`docs/process.md`](docs/process.md), [`docs/agents/team.md`](docs/agents/team.md), [`docs/architecture.md`](docs/architecture.md), [`docs/testing.md`](docs/testing.md), [`docs/deployment.md`](docs/deployment.md), [`docs/ai-sdlc.md`](docs/ai-sdlc.md), [`docs/adr/`](docs/adr/), [`specs/`](specs/) |
+| **5** | **Application (Full-Stack + DB)** | **2 pts** | ✅ | React 19 SPA (`DayBoard`, `BookingModal`, `DirectoryPage`) ↔ FastAPI REST API ↔ PostgreSQL 16 with `pg_advisory_xact_lock` (Issues [`#2`–`#11`](https://github.com/brut0/sessionboard/issues), PRs `#18`–`#27`) |
+| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **54 core app tests passing** (39 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract tests, 15 frontend Vitest/RTL/MSW tests) + **23 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`](https://github.com/brut0/sessionboard/issues)) |
+| **7** | **Containerization** | **2 pts** | ✅ | Multi-stage [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) (`db` + `app` + `otel-lgtm`) verified with `docker compose up --build` / `make up` (Issue [`#2`](https://github.com/brut0/sessionboard/issues/2), PR `#18`) |
+| **8** | **Deployment** | **2 pts** | 🚧 *Phase 7 (Human Setup)* | Deployment workflows & GHCR image built (PR `#31`); awaiting human Render Free + Neon PostgreSQL 16 setup and live verification per [`docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md`](docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md) (Issue [`#14`](https://github.com/brut0/sessionboard/issues/14)) |
+| **9** | **CI/CD (PR CI → Auto Dev → Manual Prod + Rollback)** | **3 pts** | ✅ CI / 🚧 CD | `ci.yml` live & enforced by branch protection (`Repository Hygiene`, `Backend Lint & Tests`, `Frontend Lint & Tests`, `Docker Build`); `cd-dev.yml`, `deploy-prod.yml`, `rollback.yml`, and `synthetic-probe.yml` merged in PR `#31` ([`docs/deployment.md`](docs/deployment.md), Issues [`#13`, `#14`](https://github.com/brut0/sessionboard/issues/13)) |
 | **10** | **Observability (Traces + Metrics + Logs, Zero PII)** | **2 pts** | 🔜 *Phase 8* | OpenTelemetry instrumentation of `POST /api/sessions` (`booking.create` span, `sessionboard_bookings_total`, JSON logs with shared `trace_id`, `test_telemetry_no_pii.py`) in [`specs/nfr-observability.md`](specs/nfr-observability.md) (Issue [`#15`](https://github.com/brut0/sessionboard/issues/15)) |
 | **11** | **Alerting on User Impact** | **1 pt** | 🔜 *Phase 9* | Grafana alert `BookingErrorRatioHigh` (`error / total > 20%` over 5m when `B >= 3`) on real booking failures, not CPU graphs (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
 | **12** | **On-Call Responder Agent** | **2 pts** | 🔜 *Phase 9* | `oncall.yml` woken via Grafana webhook `repository_dispatch`: opens `[incident]` issue, triggers deterministic rollback, and runs headless **Gemini CLI** to open a regression-tested fix PR (Issue [`#16`](https://github.com/brut0/sessionboard/issues/16)) |
@@ -169,6 +169,17 @@ flowchart LR
 
 ---
 
+## 🛠️ Dual AI SDLC Pipeline & Pre-Phase-8 Checklist
+
+After the initial build phases, SessionBoard provides **two full SDD + TDD AI workflows** ([`docs/ai-sdlc.md`](docs/ai-sdlc.md)) for designing, testing, verifying, and shipping new features or bug fixes without breaking domain purity or OpenAPI parity:
+
+1. **Option A — Chat-Native Pipeline (Antigravity Subagents):** Trigger [`.agents/skills/feature-sdlc/SKILL.md`](.agents/skills/feature-sdlc/SKILL.md) directly in chat to run Constitution check → `spec-agent` (+ human `"spec approved"` gate) → `architect-agent` (+ Redocly lint + GitHub issue) → parallel QA/Backend/Frontend TDD → Verification gates → `reviewer-agent` → `README.md` sync & PR.
+2. **Option B — Companion AI SDLC Web Workbench (`http://127.0.0.1:8090`):** Launch [`tools/ai-sdlc/`](tools/ai-sdlc/README.md) alongside SessionBoard (`make ai-sdlc`) for an interactive browser UI wired directly to **Google Gemini API** or **OpenAI-compatible APIs** (plus optional headless Gemini CLI), enforcing spec approval locks (`409`), path containment, English-only pre-flight checks (`422`), live gate execution, AI failure fixing, and PR creation while staying cleanly excluded from SessionBoard's runtime container.
+
+> 📋 **Human Setup Before Phase 8:** Follow [`docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md`](docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md) for the exact step-by-step cloud bootstrap (GHCR Public toggle, Neon non-pooler DBs, Render Free `dev`/`prod`, GitHub Secrets/Variables/Environment `production`, live `rollback.yml` verification, and Grafana Cloud OTLP token generation).
+
+---
+
 ## ⚡ 4. Quick Start & Commands
 
 ```bash
@@ -178,7 +189,7 @@ docker compose up --build
 # -> Health check:  http://localhost:8000/api/health
 # -> Grafana UI:    http://localhost:3000  (admin / admin)
 
-# 2. Run all unit, integration (testcontainers Postgres), and frontend tests in one command
+# 2. Run all unit, integration (testcontainers Postgres), and frontend tests
 make test
 
 # 3. Run static analysis & formatting checks (ruff + TypeScript typecheck)
@@ -186,6 +197,9 @@ make lint
 
 # 4. Run repository hygiene check (English-only + zero forbidden prototype terms)
 python scripts/check_repo_hygiene.py
+
+# 5. Launch the Companion AI SDLC Web Workbench alongside SessionBoard (port 8090)
+make ai-sdlc
 ```
 
 ---
@@ -195,8 +209,22 @@ python scripts/check_repo_hygiene.py
 ```text
 sessionboard/
 ├── AGENTS.md                        # Context entry point for all AI coding agents
-├── README.md                        # Project overview & 12-criterion grading map
+├── README.md                        # Project overview, rubric status & live evidence links
+├── Dockerfile                       # Multi-stage build (Node 22 SPA -> Python 3.12 runtime)
+├── docker-compose.yml               # Local stack: Postgres 16 + SessionBoard + Grafana OTel-LGTM
+├── Makefile                         # Unified dev, lint, test, OpenAPI, seed & AI SDLC targets
 ├── LICENSE                          # MIT License
+├── backend/
+│   ├── alembic/                     # Forward-only migrations (0001_initial_schema.py)
+│   ├── app/
+│   │   ├── domain/                  # Pure scheduling domain (zero SQLAlchemy/FastAPI imports)
+│   │   ├── routers/                 # /api/specialists, /api/clients, /api/rooms, /api/sessions
+│   │   ├── {config,db,models,schemas,seed,telemetry,main}.py
+│   └── tests/                       # Unit + testcontainers PostgreSQL integration + OpenAPI contract (39 tests)
+├── frontend/
+│   ├── src/
+│   │   ├── api/                     # Generated schema.d.ts (openapi-typescript) + openapi-fetch client
+│   │   └── components/              # DayBoard, BookingModal, DirectoryPage + Vitest/RTL/MSW tests (15 tests)
 ├── specs/
 │   ├── constitution.md              # Stack locks, architectural invariants & global DoD
 │   ├── product-spec.md              # User stories US-1..US-4, BR-1..BR-9 & 16 ACs
@@ -207,17 +235,24 @@ sessionboard/
 ├── docs/
 │   ├── architecture.md              # Detailed system architecture, sequences & state machine
 │   ├── architecture-explorer.html   # Standalone interactive Archify-style diagram explorer
+│   ├── testing.md                   # Multi-layer test strategy & AC-1.1..AC-4.2 traceability matrix
+│   ├── deployment.md                # Environments, expand-contract migrations, CD & rollback runbook
+│   ├── ai-sdlc.md                   # Guide for Chat-native & Companion Web AI SDLC pipelines
 │   ├── process.md                   # SDD/TDD workflow, branching, trailers & PR gates
 │   ├── agents/team.md               # Multi-agent team responsibilities & sequence
 │   ├── adr/0001..0003-*.md          # Architecture Decision Records
-│   └── plan/{MASTER_PLAN,EXECUTION_GUIDE}.md
+│   └── plan/{MASTER_PLAN,EXECUTION_GUIDE,PRE_PHASE_8_HUMAN_CHECKLIST}.md
+├── tools/
+│   └── ai-sdlc/                     # Decoupled Companion AI SDLC Web Workbench (:8090 + 23 tests)
 ├── .agents/
 │   ├── roles/*.md                   # System prompts for all 8 agent roles
-│   └── skills/*/SKILL.md            # issue-workflow, phase-gate, release-and-rollback
+│   └── skills/*/SKILL.md            # issue-workflow, phase-gate, release-and-rollback, feature-sdlc
 ├── .github/
 │   ├── ISSUE_TEMPLATE/task.yml      # Spec-backed task template with AC checkboxes
-│   └── pull_request_template.md     # PR checklist template
+│   ├── pull_request_template.md     # PR checklist template
+│   └── workflows/                   # ci.yml, cd-dev.yml, deploy-prod.yml, rollback.yml, synthetic-probe.yml
 └── scripts/
     ├── check_repo_hygiene.py        # Automated English-only & clean-room guard
+    ├── synthetic_probe.py           # Zero-dependency synthetic booking smoke/burst probe
     └── install-hooks.{sh,ps1}       # Pre-commit hook installers
 ```

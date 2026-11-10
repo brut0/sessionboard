@@ -54,6 +54,7 @@ Rule: when implementation reveals a spec gap, stop, update the spec in the same 
 ## 4. Pull requests
 
 - One PR per issue, body from `.github/pull_request_template.md`, containing `Closes #<n>`.
+  - **Human-gated infrastructure tasks** (such as Phase 7 cloud setup, Phase 8 Grafana Cloud wiring, or Phase 9 live alert setup): if code/workflows are merged before live verification can run, use `Refs #<n>` instead of `Closes #<n>` so the tracking issue stays open until the live gate passes.
 - Template sections: Summary · Linked issue · Acceptance criteria checklist (copied from the issue) · Tests added · Spec/contract changes · Screenshots (UI) · Gate output.
 - Reviewer agent posts a review using the checklist in `.agents/roles/reviewer.md`; blocking findings → "Request changes".
 - Merge strategy: squash. Human merges (except on-call PRs, which auto-merge after CI).
@@ -69,5 +70,11 @@ with a previous SHA. Details: `docs/deployment.md`.
 - Issue comments (start, done) present.
 - Tests written first and green: `make test`. Lint clean: `make lint`. Hygiene: `python scripts/check_repo_hygiene.py`.
 - Spec and contract updated first if behavior or API changed.
-- PR reviewed, CI green, `Closes #N`.
-- Affected docs updated.
+- PR reviewed, CI green, `Closes #N` (or `Refs #N` while awaiting human cloud verification).
+- Affected docs and `README.md` rubric statuses / repository map updated at each phase gate.
+
+## 7. Post-MVP Features & Change Requests (Dual AI SDLC)
+
+For new features or changes after initial phases, see [`docs/ai-sdlc.md`](ai-sdlc.md):
+- **Variant A (Chat-native inside Antigravity):** Invoke `.agents/skills/feature-sdlc/SKILL.md` in chat.
+- **Variant B (Companion Web Workbench):** Run `make ai-sdlc` (`tools/ai-sdlc/` on `http://localhost:8090`) to execute the LLM-backed SDD → Architect → TDD → Gate → Review → PR workflow via Web UI.
