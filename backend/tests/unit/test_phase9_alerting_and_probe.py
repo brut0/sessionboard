@@ -1,9 +1,11 @@
-"""Unit tests for Phase 9 synthetic probe, Grafana alerting configs, runbook, and oncall workflow."""
+"""Unit tests for Phase 9 probe, Grafana alert rule, runbook, and oncall workflow."""
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -17,6 +19,7 @@ def _load_synthetic_probe() -> ModuleType:
     spec = importlib.util.spec_from_file_location("synthetic_probe", probe_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -43,7 +46,7 @@ def test_synthetic_probe_every_third_slot_triggers_minute_overflow() -> None:
             assert minute + duration_minutes >= 60
         else:
             assert minute + duration_minutes < 60, (
-                f"Non-3rd iteration {iteration} should avoid :45 overflow so baseline error ratio ~33%"
+                f"Non-3rd iter {iteration} should avoid :45 overflow so baseline ratio ~33%"
             )
 
         assert (offset_days, start_time) not in seen_day_slots
@@ -57,7 +60,12 @@ def test_synthetic_probe_defaults_and_exits_nonzero_on_5xx(monkeypatch) -> None:
     assert args.minutes == 15
     assert args.interval == 10.0
 
-    def fake_http(url: str, method: str = "GET", body: dict | None = None, headers: dict | None = None):
+    def fake_http(
+        url: str,
+        method: str = "GET",
+        body: dict | None = None,
+        headers: dict | None = None,
+    ):
         if url.endswith("/api/health"):
             return 200, {"status": "ok", "db": "ok"}, {}
         if url.endswith("/api/version"):
@@ -70,7 +78,11 @@ def test_synthetic_probe_defaults_and_exits_nonzero_on_5xx(monkeypatch) -> None:
             return 200, [{"id": 3, "name": "Probe Room"}], {}
         if method == "POST" and url.endswith("/api/sessions"):
             if body and body["start_time"].endswith(":45"):
-                return 500, {"detail": "internal_error", "trace_id": "a" * 32}, {"x-trace-id": "a" * 32}
+                return (
+                    500,
+                    {"detail": "internal_error", "trace_id": "a" * 32},
+                    {"x-trace-id": "a" * 32},
+                )
             return 201, {"id": 99}, {"x-trace-id": "b" * 32}
         if method == "PATCH" and "/api/sessions/" in url:
             return 200, {"id": 99, "status": "cancelled"}, {}
@@ -78,7 +90,12 @@ def test_synthetic_probe_defaults_and_exits_nonzero_on_5xx(monkeypatch) -> None:
 
     monkeypatch.setattr(probe, "http_request", fake_http)
     monkeypatch.setattr(probe.time, "sleep", lambda *_a, **_kw: None)
-    exit_code = probe.run_probe_suite("http://example.test", mode="once", burst_minutes=1, interval_seconds=0.0)
+    exit_code = probe.run_probe_suite(
+        "http://example.test",
+        mode="once",
+        burst_minutes=1,
+        interval_seconds=0.0,
+    )
     assert exit_code == 1
 
 
@@ -151,3 +168,10 @@ def test_runbook_and_oncall_workflow_contract() -> None:
         "resolved",
     ):
         assert required in raw_workflow, f"Missing {required!r} in oncall.yml"
+
+    # Verify embedded Python script parses cleanly with zero YAML indentation corruption
+    py_script = workflow["jobs"]["mitigate-and-fix"]["steps"][4]["run"]
+    marker = "python3 - <<'PY'\n"
+    assert marker in py_script
+    embedded_py = py_script.split(marker, 1)[1].split("\nPY", 1)[0]
+    ast.parse(embedded_py)
