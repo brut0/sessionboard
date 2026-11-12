@@ -1,10 +1,8 @@
-"""Unit tests for pure domain time utilities and validators."""
+"""Unit tests for time utilities in app.domain.time_utils."""
 
 import pytest
 
 from app.domain.time_utils import (
-    WORKING_HOURS_END,
-    WORKING_HOURS_START,
     end_minutes,
     to_hhmm,
     to_minutes,
@@ -16,62 +14,65 @@ from app.domain.time_utils import (
 def test_to_minutes() -> None:
     assert to_minutes("00:00") == 0
     assert to_minutes("08:00") == 480
-    assert to_minutes("10:45") == 645
-    assert to_minutes("20:00") == 1200
+    assert to_minutes("12:30") == 750
+    assert to_minutes("23:59") == 1439
 
 
 def test_to_hhmm() -> None:
     assert to_hhmm(0) == "00:00"
     assert to_hhmm(480) == "08:00"
-    assert to_hhmm(645) == "10:45"
-    assert to_hhmm(1200) == "20:00"
+    assert to_hhmm(750) == "12:30"
+    assert to_hhmm(1439) == "23:59"
 
 
-def test_end_minutes_no_overflow() -> None:
-    # AC-2.1: 10:45 + 30m = 11:15
-    start = to_minutes("10:45")
-    end = end_minutes(start, 30)
-    assert end == 675
-    assert to_hhmm(end) == "11:15"
+def test_end_minutes_normal_case() -> None:
+    # 08:00 + 60 minutes = 09:00
+    assert end_minutes(to_minutes("08:00"), 60) == to_minutes("09:00")
+    # 10:00 + 90 minutes = 11:30
+    assert end_minutes(to_minutes("10:00"), 90) == to_minutes("11:30")
+
+
+def test_end_minutes_crossing_hour_boundary_45_plus_30() -> None:
+    # 10:45 + 30 minutes = 11:15
+    start_min = to_minutes("10:45")
+    duration_min = 30
+    expected_end_min = to_minutes("11:15")
+    assert end_minutes(start_min, duration_min) == expected_end_min
+
+    # 19:45 + 30 minutes = 20:15 (this should be caught by validate_working_hours)
+    start_min = to_minutes("19:45")
+    duration_min = 30
+    expected_end_min = to_minutes("20:15")
+    assert end_minutes(start_min, duration_min) == expected_end_min
 
 
 def test_validate_working_hours_valid() -> None:
-    # 08:00 to 09:00 (480 to 540)
-    validate_working_hours(480, 540)
-    # 19:00 to 20:00 (1140 to 1200)
-    validate_working_hours(1140, 1200)
+    validate_working_hours(to_minutes("08:00"), to_minutes("09:00"))
+    validate_working_hours(to_minutes("10:00"), to_minutes("12:00"))
+    validate_working_hours(to_minutes("19:00"), to_minutes("20:00"))
 
 
 def test_validate_working_hours_invalid() -> None:
-    # AC-2.2: Starts before 08:00
     with pytest.raises(ValueError, match="outside studio hours"):
-        validate_working_hours(WORKING_HOURS_START - 15, 540)
-
-    # Ends after 20:00
+        validate_working_hours(to_minutes("07:45"), to_minutes("08:45"))  # Start too early
     with pytest.raises(ValueError, match="outside studio hours"):
-        validate_working_hours(1170, WORKING_HOURS_END + 15)
+        validate_working_hours(to_minutes("19:30"), to_minutes("20:30"))  # End too late
+    with pytest.raises(ValueError, match="outside studio hours"):
+        validate_working_hours(to_minutes("07:00"), to_minutes("21:00"))  # Both too early/late
 
 
 def test_validate_granularity_and_duration_valid() -> None:
-    # AC-2.3: 15-minute start alignment and duration 15..180 step 15
-    validate_granularity_and_duration(480, 15)
-    validate_granularity_and_duration(510, 45)
-    validate_granularity_and_duration(600, 180)
+    validate_granularity_and_duration(to_minutes("08:00"), 15)
+    validate_granularity_and_duration(to_minutes("08:15"), 30)
+    validate_granularity_and_duration(to_minutes("10:45"), 180)
 
 
 def test_validate_granularity_and_duration_invalid() -> None:
-    # Invalid start granularity (e.g. 08:07 = 487)
-    with pytest.raises(ValueError, match="15-minute multiple"):
-        validate_granularity_and_duration(487, 45)
-
-    # Duration below 15
-    with pytest.raises(ValueError, match="between 15 and 180"):
-        validate_granularity_and_duration(480, 10)
-
-    # Duration above 180
-    with pytest.raises(ValueError, match="between 15 and 180"):
-        validate_granularity_and_duration(480, 195)
-
-    # Duration not multiple of 15
-    with pytest.raises(ValueError, match="15-minute multiple"):
-        validate_granularity_and_duration(480, 50)
+    with pytest.raises(ValueError, match="Start time.*must be a 15-minute multiple"):
+        validate_granularity_and_duration(to_minutes("08:01"), 15)
+    with pytest.raises(ValueError, match="Duration.*must be between 15 and 180 minutes"):
+        validate_granularity_and_duration(to_minutes("08:00"), 10)  # Duration too short
+    with pytest.raises(ValueError, match="Duration.*must be between 15 and 180 minutes"):
+        validate_granularity_and_duration(to_minutes("08:00"), 195)  # Duration too long
+    with pytest.raises(ValueError, match="Duration.*must be a 15-minute multiple"):
+        validate_granularity_and_duration(to_minutes("08:00"), 20)  # Duration not multiple of 15

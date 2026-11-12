@@ -44,8 +44,7 @@ def _serialize_session(
     client_display_name: str,
     room_name: str,
 ) -> SessionRead:
-    start_str = _format_time(sess.start_time)
-    start_min = to_minutes(start_str)
+    start_min = sess.start_time.hour * 60 + sess.start_time.minute
     end_min = end_minutes(start_min, sess.duration_minutes)
     end_str = to_hhmm(end_min)
 
@@ -58,7 +57,7 @@ def _serialize_session(
         room_id=sess.room_id,
         room_name=room_name,
         session_date=sess.session_date,
-        start_time=start_str,
+        start_time=to_hhmm(start_min),
         end_time=end_str,
         duration_minutes=sess.duration_minutes,
         status=sess.status,
