@@ -203,33 +203,50 @@ jobs:
                   query_endpoint = f"{logs_url}/loki/api/v1/query_range"
               else:
                   query_endpoint = logs_url
-              now_ns = int(time.time() * 1_000_000_000)
-              start_ns = now_ns - (30 * 60 * 1_000_000_000)
-              params = urllib.parse.urlencode(
-                  {
-                      "query": '{service_name="sessionboard"} | json | level="ERROR"',
-                      "start": str(start_ns),
-                      "end": str(now_ns),
-                      "limit": "200",
-                      "direction": "backward",
-                  }
-              )
-              req = urllib.request.Request(f"{query_endpoint}?{params}")
               creds = base64.b64encode(f"{logs_user}:{logs_token}".encode("utf-8")).decode("ascii")
-              req.add_header("Authorization", f"Basic {creds}")
-              try:
+
+              def query_loki(logql: str, lookback_minutes: int, limit: int) -> list[str]:
+                  now_ns = int(time.time() * 1_000_000_000)
+                  start_ns = now_ns - (lookback_minutes * 60 * 1_000_000_000)
+                  params = urllib.parse.urlencode(
+                      {
+                          "query": logql,
+                          "start": str(start_ns),
+                          "end": str(now_ns),
+                          "limit": str(limit),
+                          "direction": "backward",
+                      }
+                  )
+                  req = urllib.request.Request(f"{query_endpoint}?{params}")
+                  req.add_header("Authorization", f"Basic {creds}")
+                  lines: list[str] = []
                   with urllib.request.urlopen(req, timeout=20) as resp:
                       payload = json.loads(resp.read().decode("utf-8"))
                   for stream in payload.get("data", {}).get("result", []):
                       for _, line in stream.get("values", []):
-                          loki_lines.append(line)
-                          if len(loki_lines) >= 200:
-                              break
-                      if len(loki_lines) >= 200:
-                          break
+                          lines.append(line)
+                          if len(lines) >= limit:
+                              return lines
+                  return lines
+
+              try:
+                  loki_lines = query_loki(
+                      '{service_name="sessionboard"} | json | level="ERROR"',
+                      30,
+                      200,
+                  )
+                  recent_lines = query_loki('{service_name="sessionboard"}', 60, 20)
+                  print(
+                      f"[info] Loki query status=200 error_lines_30m={len(loki_lines)} "
+                      f"total_lines_60m={len(recent_lines)}"
+                  )
               except Exception as err:
-                  loki_lines.append(f"[warn] Loki query failed ({type(err).__name__}); continuing without logs.")
+                  err_code = getattr(err, "code", "")
+                  warn = f"[warn] Loki query failed ({type(err).__name__} {err_code}); continuing without logs.".strip()
+                  print(warn)
+                  loki_lines.append(warn)
           else:
+              print("[info] Grafana Loki credentials not configured; skipped live log fetch.")
               loki_lines.append("[info] Grafana Loki credentials not configured; skipped live log fetch.")
 
           recent_log = run_git(["log", "-5", "--stat"])
@@ -301,25 +318,45 @@ jobs:
           PROMPT_FILE=$(mktemp)
           cat .agents/roles/oncall.md docs/runbooks/booking-errors.md incident/context.md > "$PROMPT_FILE"
 
+          MODELS=()
+          PRIMARY="${GEMINI_MODEL:-gemini-3.5-flash}"
+          for CANDIDATE in "$PRIMARY" "gemini-3.1-flash-lite" "gemini-2.5-flash" "auto"; do
+            [ -n "$CANDIDATE" ] || continue
+            ALREADY=false
+            for EXISTING in "${MODELS[@]+"${MODELS[@]}"}"; do
+              if [ "$EXISTING" = "$CANDIDATE" ]; then
+                ALREADY=true
+                break
+              fi
+            done
+            if [ "$ALREADY" = "false" ]; then
+              MODELS+=("$CANDIDATE")
+            fi
+          done
+
+          PROMPT_TEXT="Diagnose this SessionBoard incident from the appended context, fix the root cause in backend/ with a regression test, and run uv run ruff check . && uv run ruff format . && OTEL_SDK_DISABLED=true uv run pytest -q before finishing."
+          RC=1
           set +e
-          npx -y @google/gemini-cli@latest \
-            --yolo \
-            --skip-trust \
-            -m "$GEMINI_MODEL" \
-            -p "Diagnose this SessionBoard incident from the appended context, fix the root cause in backend/ with a regression test, and run uv run ruff check . && uv run ruff format . && OTEL_SDK_DISABLED=true uv run pytest -q before finishing." \
-            < "$PROMPT_FILE"
-          RC=$?
-          if [ "$RC" -ne 0 ]; then
-            echo "::warning::Gemini CLI failed (exit $RC). Waiting 60s and retrying once..."
-            sleep 60
-            npx -y @google/gemini-cli@latest \
+          for MODEL in "${MODELS[@]}"; do
+            echo "[info] Attempting headless Gemini CLI with model=$MODEL"
+            MODEL_ARGS=()
+            if [ "$MODEL" != "auto" ]; then
+              MODEL_ARGS=(-m "$MODEL")
+            fi
+            timeout 210s npx -y @google/gemini-cli@latest \
               --yolo \
               --skip-trust \
-              -m "$GEMINI_MODEL" \
-              -p "Diagnose this SessionBoard incident from the appended context, fix the root cause in backend/ with a regression test, and run uv run ruff check . && uv run ruff format . && OTEL_SDK_DISABLED=true uv run pytest -q before finishing." \
+              "${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"}" \
+              -p "$PROMPT_TEXT" \
               < "$PROMPT_FILE"
             RC=$?
-          fi
+            if [ "$RC" -eq 0 ]; then
+              echo "[info] Gemini CLI completed cleanly with model=$MODEL"
+              break
+            fi
+            echo "::warning::Gemini CLI failed for model=$MODEL (exit $RC); trying fallback if available..."
+            sleep 5
+          done
           set -e
           rm -f "$PROMPT_FILE"
 
