@@ -1,11 +1,9 @@
 ---
 name: feature-sdlc
 description: >-
-  Complete end-to-end AI SDLC pipeline executed inside Antigravity chat for adding new features,
-  modifying existing behavior, or fixing bugs in SessionBoard. Enforces constitution/non-goals guards,
-  spec-first approval, OpenAPI/expand-only architecture planning, GitHub Issue tracking, parallel
-  TDD implementation (Backend, Frontend, independent QA), full verification gates, Reviewer sign-off,
-  README sync, PR/CI automation, and dev/prod rollout.
+  Use when adding features, changing existing behavior, or fixing bugs in SessionBoard
+  through the full chat-native AI SDLC pipeline (triggers: new feature request,
+  enhancement, bugfix, spec-to-PR delivery).
 ---
 
 # Feature AI SDLC (Chat-Native Pipeline)
@@ -81,7 +79,7 @@ For the side-by-side interactive Web Workbench with direct LLM API execution, us
 
 ## Stage 4 — Local Verification Gate (`phase-gate`)
 
-Run every applicable check and capture verbatim output for the PR and issue comments:
+Run every applicable check (details and Windows notes in [verification-commands.md](../../references/verification-commands.md)) and capture verbatim output for the PR and issue comments:
 
 ```powershell
 # 1. Hygiene (English-only + forbidden prototype terms across working tree & commits)

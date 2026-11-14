@@ -1,9 +1,9 @@
 ---
 name: release-and-rollback
 description: >-
-  Use this skill when promoting SessionBoard from dev to prod, rolling back an environment, checking
-  which version is deployed, or running the synthetic probe. Covers the GitHub Actions workflows
-  deploy-prod.yml, rollback.yml, synthetic-probe.yml and how to pick the right commit SHA.
+  Use when promoting SessionBoard from dev to prod, rolling back an environment,
+  checking deployed versions, or running synthetic probes (triggers: deploy-prod.yml,
+  rollback.yml, synthetic-probe.yml, checking commit SHA).
 ---
 
 # Release and rollback
