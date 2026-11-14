@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { UserCheck, Users, DoorOpen, Plus, Trash2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { UserCheck, Users, DoorOpen, Plus, Trash2, AlertCircle, Search } from 'lucide-react';
 import {
   apiClient,
   type Specialist,
@@ -7,12 +7,14 @@ import {
   type Room,
   type ErrorDetail,
 } from '../api/client';
+import { getSpecialtyTheme, getInitials } from '../utils/theme';
 
 export const DirectoryPage: React.FC = () => {
   const [specialists, setSpecialists] = useState<Specialist[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Form states
   const [specName, setSpecName] = useState('');
@@ -185,12 +187,103 @@ export const DirectoryPage: React.FC = () => {
     }
   };
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  const filteredSpecialists = useMemo(
+    () =>
+      normalizedQuery
+        ? specialists.filter(
+            (s) =>
+              s.name.toLowerCase().includes(normalizedQuery) ||
+              s.specialty.toLowerCase().includes(normalizedQuery)
+          )
+        : specialists,
+    [specialists, normalizedQuery]
+  );
+
+  const filteredClients = useMemo(
+    () =>
+      normalizedQuery
+        ? clients.filter((c) => c.display_name.toLowerCase().includes(normalizedQuery))
+        : clients,
+    [clients, normalizedQuery]
+  );
+
+  const filteredRooms = useMemo(
+    () =>
+      normalizedQuery
+        ? rooms.filter((r) => r.name.toLowerCase().includes(normalizedQuery))
+        : rooms,
+    [rooms, normalizedQuery]
+  );
+
   return (
-    <div data-testid="directory-page" className="space-y-6">
-      {/* Page Title & Error Banner */}
-      <div>
-        <h2 className="text-xl font-bold text-slate-900 tracking-tight">Studio Directory</h2>
-        <p className="text-xs text-slate-500">Manage specialists, clients, and rooms</p>
+    <div data-testid="directory-page" className="space-y-5">
+      {/* Page Title & Search Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 tracking-tight">Studio Directory</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Manage specialists, clients, and studio rooms available for scheduling.
+          </p>
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+          <input
+            type="search"
+            data-testid="directory-search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filter specialists, clients, rooms..."
+            className="w-full border border-slate-300 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition"
+          />
+        </div>
+      </div>
+
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+              Active Specialists
+            </span>
+            <span className="text-xl font-bold text-slate-900 font-mono tabular-nums mt-0.5 block">
+              {specialists.length}
+            </span>
+          </div>
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <UserCheck className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+              Registered Clients
+            </span>
+            <span className="text-xl font-bold text-slate-900 font-mono tabular-nums mt-0.5 block">
+              {clients.length}
+            </span>
+          </div>
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+              Studio Rooms
+            </span>
+            <span className="text-xl font-bold text-slate-900 font-mono tabular-nums mt-0.5 block">
+              {rooms.length}
+            </span>
+          </div>
+          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <DoorOpen className="w-5 h-5" />
+          </div>
+        </div>
       </div>
 
       {errorBanner && (
@@ -213,44 +306,64 @@ export const DirectoryPage: React.FC = () => {
       )}
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-slate-400">Loading directory...</div>
+        <div className="bg-white rounded-2xl border border-slate-200 py-12 text-center text-sm text-slate-400">
+          Loading directory...
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Specialists Card */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col">
             <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
               <UserCheck className="w-5 h-5 text-indigo-600" />
               <h3 className="font-bold text-slate-800 text-base">Specialists</h3>
-              <span className="ml-auto text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
-                {specialists.length}
+              <span className="ml-auto text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-mono">
+                {filteredSpecialists.length}
               </span>
             </div>
 
             {/* List */}
             <ul data-testid="specialist-list" className="space-y-2 flex-1 mb-4 overflow-y-auto max-h-80">
-              {specialists.length === 0 ? (
-                <li className="py-6 text-center text-xs text-slate-400 italic">No specialists registered</li>
+              {filteredSpecialists.length === 0 ? (
+                <li className="py-6 text-center text-xs text-slate-400 italic">
+                  {specialists.length === 0 ? 'No specialists registered' : 'No matching specialists'}
+                </li>
               ) : (
-                specialists.map((s) => (
-                  <li
-                    key={s.id}
-                    className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition"
-                  >
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">{s.name}</div>
-                      <div className="text-xs text-slate-500">{s.specialty}</div>
-                    </div>
-                    <button
-                      type="button"
-                      data-testid={`btn-delete-specialist-${s.id}`}
-                      onClick={() => handleDeleteSpecialist(s.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition"
-                      title="Delete specialist"
+                filteredSpecialists.map((s) => {
+                  const theme = getSpecialtyTheme(s.name);
+                  return (
+                    <li
+                      key={s.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition gap-2"
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </li>
-                ))
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${theme.avatarBg} ${theme.avatarText}`}
+                        >
+                          {getInitials(s.name)}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-900 truncate">
+                            {s.name}
+                          </div>
+                          <span
+                            className={`inline-block mt-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${theme.bgBadge} ${theme.textBadge} ${theme.borderBadge}`}
+                          >
+                            {s.specialty}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`btn-delete-specialist-${s.id}`}
+                        onClick={() => handleDeleteSpecialist(s.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition shrink-0"
+                        title="Delete specialist"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </li>
+                  );
+                })
               )}
             </ul>
 
@@ -286,31 +399,40 @@ export const DirectoryPage: React.FC = () => {
           </div>
 
           {/* Clients Card */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col">
             <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
               <Users className="w-5 h-5 text-indigo-600" />
               <h3 className="font-bold text-slate-800 text-base">Clients</h3>
-              <span className="ml-auto text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
-                {clients.length}
+              <span className="ml-auto text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-mono">
+                {filteredClients.length}
               </span>
             </div>
 
             {/* List */}
             <ul data-testid="client-list" className="space-y-2 flex-1 mb-4 overflow-y-auto max-h-80">
-              {clients.length === 0 ? (
-                <li className="py-6 text-center text-xs text-slate-400 italic">No clients registered</li>
+              {filteredClients.length === 0 ? (
+                <li className="py-6 text-center text-xs text-slate-400 italic">
+                  {clients.length === 0 ? 'No clients registered' : 'No matching clients'}
+                </li>
               ) : (
-                clients.map((c) => (
+                filteredClients.map((c) => (
                   <li
                     key={c.id}
-                    className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition"
+                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition gap-2"
                   >
-                    <div className="text-sm font-semibold text-slate-900">{c.display_name}</div>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-8 h-8 rounded-full bg-slate-200/80 text-slate-700 text-xs font-bold flex items-center justify-center shrink-0">
+                        {getInitials(c.display_name)}
+                      </span>
+                      <div className="text-sm font-semibold text-slate-900 truncate">
+                        {c.display_name}
+                      </div>
+                    </div>
                     <button
                       type="button"
                       data-testid={`btn-delete-client-${c.id}`}
                       onClick={() => handleDeleteClient(c.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition"
+                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition shrink-0"
                       title="Delete client"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -343,31 +465,38 @@ export const DirectoryPage: React.FC = () => {
           </div>
 
           {/* Rooms Card */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col">
             <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
               <DoorOpen className="w-5 h-5 text-indigo-600" />
               <h3 className="font-bold text-slate-800 text-base">Rooms</h3>
-              <span className="ml-auto text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
-                {rooms.length}
+              <span className="ml-auto text-xs font-medium px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-mono">
+                {filteredRooms.length}
               </span>
             </div>
 
             {/* List */}
             <ul data-testid="room-list" className="space-y-2 flex-1 mb-4 overflow-y-auto max-h-80">
-              {rooms.length === 0 ? (
-                <li className="py-6 text-center text-xs text-slate-400 italic">No rooms registered</li>
+              {filteredRooms.length === 0 ? (
+                <li className="py-6 text-center text-xs text-slate-400 italic">
+                  {rooms.length === 0 ? 'No rooms registered' : 'No matching rooms'}
+                </li>
               ) : (
-                rooms.map((r) => (
+                filteredRooms.map((r) => (
                   <li
                     key={r.id}
-                    className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition"
+                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition gap-2"
                   >
-                    <div className="text-sm font-semibold text-slate-900">{r.name}</div>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                        <DoorOpen className="w-4 h-4" />
+                      </span>
+                      <div className="text-sm font-semibold text-slate-900 truncate">{r.name}</div>
+                    </div>
                     <button
                       type="button"
                       data-testid={`btn-delete-room-${r.id}`}
                       onClick={() => handleDeleteRoom(r.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition"
+                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition shrink-0"
                       title="Delete room"
                     >
                       <Trash2 className="w-4 h-4" />

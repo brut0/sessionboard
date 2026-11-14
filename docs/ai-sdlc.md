@@ -79,8 +79,10 @@ Open **http://127.0.0.1:8090**, click **API Settings**, select **Google Gemini A
 ### 2. Workbench Capabilities
 - **Stage 1 (Intake):** Analyzes the feature against `specs/constitution.md` and Non-Goals, generates clarifying questions, and proposes a clean `feat/<slug>` branch name.
 - **Stage 2 (Spec + Human Approval Lock):** Drafts `specs/product-spec.md` updates (`BR-*`, `AC-*`), displays unified diffs, applies patches safely, and keeps **Architect / TDD stages locked (`HTTP 409`)** until you explicitly click **Approve Spec**.
-- **Stage 3 (Architect & GitHub Issue):** Updates `specs/api/openapi.yaml` / `specs/data-model.md` / `specs/tasks.md` and creates the real GitHub Issue via `gh issue create`.
+- **Stage 3 (Architect & GitHub Issue):** Updates `specs/api/openapi.yaml` / `specs/data-model.md` / `specs/tasks.md` using live repository file tree awareness (`list_repo_tree`) and creates the real GitHub Issue via `gh issue create`.
 - **Stage 4 (TDD Tests First -> Implement -> Optional Headless Gemini CLI):**
+  - **Live Source Context & Dual Roles:** Automatically injects existing backend and frontend source snapshots (`models.py`, `schemas.py`, `conflicts.py`, routers, `App.tsx`, `DayBoard.tsx`, `WeekBoard.tsx`, `BookingModal.tsx`, `DirectoryPage.tsx`, MSW `handlers.ts`), plus any user-pinned `Target context files` (`context_files`), and loads both `.agents/roles/backend.md` and `.agents/roles/frontend.md`.
+  - **Surgical Search/Replace Patches:** Patches support ordered `"edits": [{"search": "...", "replace": "..."}]` hunks (as well as full `"content"` for new files), preventing accidental overwrites of unrelated components, styling, or `data-testid` attributes.
   - **4a (`tdd_tests`):** Generates failing test patches first so you can verify RED in the Gate Console.
   - **4b (`implement`):** Generates minimal production patches matching the tests and OpenAPI schema.
   - **Optional Headless CLI:** Runs local `gemini --yolo` directly against the workspace if installed.

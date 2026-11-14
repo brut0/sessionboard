@@ -248,3 +248,89 @@ def test_update_config_and_hygiene_gate_execution(tmp_path: Path) -> None:
     assert results[0]["gate"] == "hygiene"
     assert results[0]["passed"] is True
     assert results[0]["exit_code"] == 0
+
+
+def test_source_context_injection_and_surgical_search_replace_edits(tmp_path: Path) -> None:
+    _seed_mini_repo(tmp_path)
+    (tmp_path / "backend" / "app" / "routers").mkdir(parents=True)
+    (tmp_path / "backend" / "app" / "routers" / "sessions.py").write_text(
+        "def list_sessions():\n    return []\n", encoding="utf-8"
+    )
+    (tmp_path / "frontend" / "src" / "components").mkdir(parents=True)
+    (tmp_path / "frontend" / "src" / "App.tsx").write_text(
+        "export function App() { return <div>SessionBoard</div>; }\n",
+        encoding="utf-8",
+    )
+    custom_file = tmp_path / "frontend" / "src" / "components" / "BookingModal.tsx"
+    custom_file.write_text(
+        "// HEADER STAY INTACT\nconst TITLE = 'Book Session';\n// FOOTER STAY INTACT\n",
+        encoding="utf-8",
+    )
+
+    captured_prompts: list[tuple[str, str]] = []
+
+    class SurgicalEditLLM:
+        def complete(self, system_prompt: str, user_prompt: str) -> str:
+            captured_prompts.append((system_prompt, user_prompt))
+            return json.dumps(
+                {
+                    "summary": "Updated BookingModal title via surgical search/replace edit.",
+                    "patches": [
+                        {
+                            "path": "frontend/src/components/BookingModal.tsx",
+                            "edits": [
+                                {
+                                    "search": "const TITLE = 'Book Session';",
+                                    "replace": "const TITLE = 'Book Studio Session';",
+                                }
+                            ],
+                            "rationale": "Preserve header and footer via surgical edit",
+                        }
+                    ],
+                }
+            )
+
+    settings = WorkbenchSettings(repo_root=tmp_path, gemini_api_key="AIzaTest123456")
+    client = TestClient(create_app(settings=settings, llm_factory=lambda _cfg: SurgicalEditLLM()))
+
+    create_resp = client.post(
+        "/api/runs",
+        json={"title": "Surgical UI update", "prompt": "Update BookingModal title safely"},
+    )
+    assert create_resp.status_code == 201
+    run_id = create_resp.json()["id"]
+    assert client.post(f"/api/runs/{run_id}/approve-spec").status_code == 200
+
+    impl_resp = client.post(
+        f"/api/runs/{run_id}/stages/implement",
+        json={
+            "guidance": "Use surgical edits",
+            "context_files": ["frontend/src/components/BookingModal.tsx"],
+        },
+    )
+    assert impl_resp.status_code == 200
+    body = impl_resp.json()
+
+    # Prompt included both backend+frontend roles, file tree, default source files, and target file
+    sys_prompt, usr_prompt = captured_prompts[-1]
+    assert "# Role: backend" in sys_prompt
+    assert "# Role: frontend" in sys_prompt
+    assert "=== Repository File Tree ===" in usr_prompt
+    assert "backend/app/routers/sessions.py" in usr_prompt
+    assert "frontend/src/App.tsx" in usr_prompt
+    assert "// HEADER STAY INTACT" in usr_prompt
+
+    patches = body["pending_patches"]
+    assert len(patches) == 1
+    assert "-const TITLE = 'Book Session';" in patches[0]["diff_preview"]
+    assert "+const TITLE = 'Book Studio Session';" in patches[0]["diff_preview"]
+
+    apply_resp = client.post(
+        f"/api/runs/{run_id}/apply",
+        json={"paths": ["frontend/src/components/BookingModal.tsx"]},
+    )
+    assert apply_resp.status_code == 200
+    updated_text = custom_file.read_text(encoding="utf-8")
+    assert "// HEADER STAY INTACT" in updated_text
+    assert "const TITLE = 'Book Studio Session';" in updated_text
+    assert "// FOOTER STAY INTACT" in updated_text

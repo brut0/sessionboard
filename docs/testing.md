@@ -14,7 +14,7 @@ SessionBoard enforces a multi-layered automated testing pyramid:
 | **Unit (Domain, Telemetry & Ops)** | `backend/tests/unit/` | `pytest` (pure in-memory Python 3.12) | Interval arithmetic (`time_utils.py`), overflow math, studio working hours (08:00–20:00), 15-minute granularity, multi-resource conflict detection (`conflicts.py`), plus `JsonLogFormatter` / Grafana dashboard (`test_logging_and_telemetry.py`) and synthetic probe / alert rule / on-call workflow checks (`test_phase9_alerting_and_probe.py`). |
 | **Integration** | `backend/tests/integration/` | `pytest` + `testcontainers` (PostgreSQL 16) | Tests all 16 Acceptance Criteria against a real PostgreSQL 16 database running Alembic migrations, plus end-to-end zero-PII OTel span/metric/log correlation (`test_telemetry_no_pii.py`). |
 | **Contract** | `backend/tests/integration/test_openapi_contract.py` | `pytest` + `PyYAML` | Verifies that FastAPI's generated `app.openapi()` matches `specs/api/openapi.yaml` in routes, HTTP methods, operation IDs, and declared response status codes. |
-| **Frontend** | `frontend/src/**/*.test.tsx` | `vitest` + `jsdom` + `@testing-library/react` + `msw` | Component rendering, tab switching (Day Board / Directory), room column grouping, 15-min booking modal, 409 conflict banners, 500 Trace ID display, and status transitions. |
+| **Frontend** | `frontend/src/**/*.test.tsx` | `vitest` + `jsdom` + `@testing-library/react` + `msw` | Component rendering, Left Sidebar view switching (`DayBoard`, `WeekBoard`, `DirectoryPage`), Gantt timeline & slot prefill, operational KPIs/filters/drawer, 15-min booking modal, 409 conflict banners, 500 Trace ID display, and status transitions. |
 
 ---
 
@@ -56,6 +56,19 @@ make test-frontend
 cd frontend && npm test
 ```
 
+### Test Coverage Reports (Backend, Frontend, AI SDLC Workbench)
+GitHub Actions (`.github/workflows/ci.yml`) runs every suite with coverage enabled and posts exact per-module coverage tables to `$GITHUB_STEP_SUMMARY` on every PR and push. Reproduce locally with:
+```powershell
+# Backend (pytest-cov, 90% total statement coverage across 49 tests)
+cd backend && uv run pytest -v --cov=app --cov-report=term-missing
+
+# Frontend (@vitest/coverage-v8, 93.84% statement/line coverage across 21 tests)
+cd frontend && npm run test:coverage
+
+# Companion AI SDLC Workbench (pytest-cov, 78% total statement coverage across 40 tests)
+cd tools/ai-sdlc && uv run pytest -v --cov=sdlc_app --cov-report=term-missing
+```
+
 ---
 
 ## 3. Frontend Component Test Architecture (Vitest + RTL + MSW)
@@ -68,10 +81,11 @@ The frontend test suite executes under Vitest in a `jsdom` environment. Network 
 ### Frontend AC Coverage Matrix
 | Component Test File | Target Component | Verifies Criteria |
 |---|---|---|
-| `src/App.test.tsx` | `App` | Tab navigation between Day Board and Directory |
-| `src/components/DayBoard.test.tsx` | `DayBoard` | **AC-3.1** (grouping sessions by room), **AC-4.1** (Done/Cancel status transitions), **AC-4.2** (cancelled session styling), Date navigation |
-| `src/components/BookingModal.test.tsx` | `BookingModal` | **AC-2.1** (successful booking submission), **AC-2.5** / **AC-2.6** (409 conflict list rendering), 5xx Trace ID error banner |
-| `src/components/DirectoryPage.test.tsx` | `DirectoryPage` | **AC-1.1** (listing and creating specialists/clients/rooms), **AC-1.3** (duplicate room name 409), **AC-1.4** (204 deletion), **AC-1.5** (referenced entity delete 409) |
+| `src/App.test.tsx` | `App` | Left Sidebar navigation between Day Board, Week Overview, and Directory |
+| `src/components/DayBoard.test.tsx` | `DayBoard` | **AC-3.1** (Columns + Gantt Timeline `By Room` / `By Specialist` views), **AC-4.1** (Done/Cancel status transitions), **AC-4.2** (cancelled session styling), KPI ribbon, specialist filter dimming, Slide-over Session Drawer & Follow-up prefill, Date navigation |
+| `src/components/WeekBoard.test.tsx` | `WeekBoard` | 7-day Monday–Sunday week matrix overview and single-day room grid drill-down |
+| `src/components/BookingModal.test.tsx` | `BookingModal` | **AC-2.1** (successful booking submission), **AC-2.5** / **AC-2.6** (409 conflict list rendering), slot prefill from Gantt/Follow-up, 5xx Trace ID error banner |
+| `src/components/DirectoryPage.test.tsx` | `DirectoryPage` | **AC-1.1** (listing, searching, and creating specialists/clients/rooms), **AC-1.3** (duplicate room name 409), **AC-1.4** (204 deletion), **AC-1.5** (referenced entity delete 409) |
 
 ---
 
