@@ -30,6 +30,7 @@ def test_root_serves_accessible_workbench_html_and_security_headers(tmp_path: Pa
     assert 'autocomplete="current-password"' in html
     assert 'id="toggle-login-password"' in html
     assert 'id="logout-btn"' in html
+    assert 'id="cfg-gh-token"' in html
 
     css = client.get("/static/styles.css")
     assert css.status_code == 200
@@ -39,3 +40,4 @@ def test_root_serves_accessible_workbench_html_and_security_headers(tmp_path: Pa
     assert "e.currentTarget.reset()" not in js.text
     assert "const form = e.currentTarget;" in js.text
     assert "form.reset();" in js.text
+    assert "cfgGhToken" in js.text

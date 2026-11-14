@@ -56,6 +56,8 @@ class WorkbenchSettings(BaseSettings):
         default="https://api.openai.com/v1",
         alias="OPENAI_BASE_URL",
     )
+    gh_token: str = Field(default="", alias="GH_TOKEN")
+    github_token: str = Field(default="", alias="GITHUB_TOKEN")
 
     @property
     def auth_required(self) -> bool:
@@ -92,8 +94,16 @@ class WorkbenchSettings(BaseSettings):
     def effective_api_key(self) -> str:
         return self.gemini_api_key if self.llm_provider == "gemini" else self.openai_api_key
 
+    def effective_gh_token(self) -> str:
+        return (
+            self.gh_token.strip()
+            or self.github_token.strip()
+            or os.environ.get("GH_TOKEN", "").strip()
+            or os.environ.get("GITHUB_TOKEN", "").strip()
+        )
+
     def load_persisted_overrides(self) -> WorkbenchSettings:
-        """Apply git-ignored LLM runtime overrides saved from the Web UI if present."""
+        """Apply git-ignored runtime overrides saved from the Web UI if present."""
         cfg_file = self.runtime_config_file
         if not cfg_file.is_file():
             return self
@@ -109,6 +119,7 @@ class WorkbenchSettings(BaseSettings):
             "gemini_api_key",
             "openai_api_key",
             "openai_base_url",
+            "gh_token",
         ):
             val = data.get(field_name)
             if isinstance(val, str) and val.strip():
@@ -116,7 +127,7 @@ class WorkbenchSettings(BaseSettings):
         return self.model_copy(update=updates)
 
     def save_persisted_overrides(self) -> None:
-        """Save UI-updated LLM config only (never persisting auth credentials to disk)."""
+        """Save UI-updated LLM/GitHub config only (never persisting owner auth credentials)."""
         self.state_dir.mkdir(parents=True, exist_ok=True)
         payload = {
             "llm_provider": self.llm_provider,
@@ -124,6 +135,7 @@ class WorkbenchSettings(BaseSettings):
             "gemini_api_key": self.gemini_api_key,
             "openai_api_key": self.openai_api_key,
             "openai_base_url": self.openai_base_url,
+            "gh_token": self.gh_token,
         }
         self.runtime_config_file.write_text(
             json.dumps(payload, indent=2) + "\n",

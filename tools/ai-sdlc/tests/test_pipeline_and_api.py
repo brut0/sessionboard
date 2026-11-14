@@ -228,12 +228,16 @@ def test_update_config_and_hygiene_gate_execution(tmp_path: Path) -> None:
             "llm_model": "gpt-4o-mini",
             "openai_base_url": "http://localhost:11434/v1",
             "api_key": "sk-updated-secret-9999",
+            "gh_token": "ghp_secretTokenValue1234",
         },
     )
     assert upd.status_code == 200
     assert upd.json()["llm_provider"] == "openai"
     assert upd.json()["masked_key"] == "sk-u...9999"
     assert "sk-updated-secret-9999" not in json.dumps(upd.json())
+    assert upd.json()["has_gh_token"] is True
+    assert upd.json()["masked_gh_token"] == "ghp_...1234"
+    assert "ghp_secretTokenValue1234" not in json.dumps(upd.json())
 
     run_resp = client.post(
         "/api/runs",

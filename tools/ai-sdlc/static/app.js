@@ -46,6 +46,8 @@ const el = {
   cfgBaseUrl: document.getElementById("cfg-base-url"),
   cfgApiKey: document.getElementById("cfg-api-key"),
   cfgKeyHint: document.getElementById("cfg-key-hint"),
+  cfgGhToken: document.getElementById("cfg-gh-token"),
+  cfgGhHint: document.getElementById("cfg-gh-hint"),
   toggleKeyBtn: document.getElementById("toggle-key-visibility"),
 };
 
@@ -139,11 +141,15 @@ function renderConfig(cfg) {
   el.cfgKeyHint.textContent = cfg.has_api_key
     ? `Saved key: ${cfg.masked_key}`
     : "Saved key: none yet (paste Gemini or OpenAI key)";
+  el.cfgGhHint.textContent = cfg.has_gh_token
+    ? `Saved GitHub token: ${cfg.masked_gh_token}`
+    : "Saved GitHub token: none (paste GitHub PAT for Issues/PRs)";
 }
 
 function renderGitOverview(info) {
   const dirtyCount = Array.isArray(info.dirty_files) ? info.dirty_files.length : 0;
-  el.gitBadge.textContent = `Branch: ${info.branch} (${dirtyCount} modified)`;
+  const ghState = info.gh_authenticated ? "GH: OK" : "GH: no token";
+  el.gitBadge.textContent = `Branch: ${info.branch} (${dirtyCount} modified) · ${ghState}`;
   el.outGit.querySelector("code").textContent = JSON.stringify(info, null, 2);
 }
 
@@ -622,12 +628,15 @@ document.getElementById("settings-form").addEventListener("submit", async (e) =>
         llm_model: el.cfgModel.value,
         openai_base_url: el.cfgBaseUrl.value,
         api_key: el.cfgApiKey.value || null,
+        gh_token: el.cfgGhToken.value || null,
       }),
     });
     el.cfgApiKey.value = "";
+    el.cfgGhToken.value = "";
     renderConfig(cfg);
+    await refreshAll();
     el.settingsDialog.close();
-    setStatus(`Saved LLM configuration (${cfg.llm_provider} / ${cfg.llm_model}).`);
+    setStatus(`Saved settings (${cfg.llm_provider} / ${cfg.llm_model}).`);
   } catch (err) {
     setError(`Failed to save API settings: ${err.message}`);
   }
@@ -682,6 +691,7 @@ el.logoutBtn.addEventListener("click", async () => {
     state.activeRun = null;
     state.runs = [];
     el.cfgApiKey.value = "";
+    el.cfgGhToken.value = "";
     if (el.settingsDialog.open) {
       el.settingsDialog.close();
     }

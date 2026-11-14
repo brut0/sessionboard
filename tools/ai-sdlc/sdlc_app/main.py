@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -119,7 +118,7 @@ def create_app(
         bootstrap_status = bootstrap_workspace(
             active_settings.repo_root,
             clone_repo_url=active_settings.clone_repo_url,
-            gh_token=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", ""),
+            gh_token=active_settings.effective_gh_token(),
         )
 
     state: dict[str, WorkbenchSettings] = {"settings": active_settings}
@@ -268,7 +267,7 @@ def create_app(
                 workspace_ready=workspace_ready,
             )
 
-        git_info = get_git_overview(cfg.repo_root)
+        git_info = get_git_overview(cfg.repo_root, gh_token=cfg.effective_gh_token())
         return HealthResponse(
             status=overall_status,
             version=cfg.app_version,
@@ -284,7 +283,8 @@ def create_app(
 
     @app.get("/api/git-status")
     def git_status() -> dict[str, object]:
-        return get_git_overview(state["settings"].repo_root)
+        cfg = state["settings"]
+        return get_git_overview(cfg.repo_root, gh_token=cfg.effective_gh_token())
 
     @app.get("/api/stages")
     def list_stages() -> list[dict[str, str]]:
@@ -326,17 +326,22 @@ def create_app(
             },
         ]
 
-    @app.get("/api/config", response_model=ConfigStatus)
-    def get_config() -> ConfigStatus:
-        cfg = state["settings"]
+    def _config_status(cfg: WorkbenchSettings) -> ConfigStatus:
         key = cfg.effective_api_key()
+        gh_tok = cfg.effective_gh_token()
         return ConfigStatus(
             llm_provider=cfg.llm_provider,
             llm_model=cfg.llm_model,
             openai_base_url=cfg.openai_base_url,
             has_api_key=bool(key.strip()),
             masked_key=mask_secret(key),
+            has_gh_token=bool(gh_tok),
+            masked_gh_token=mask_secret(gh_tok),
         )
+
+    @app.get("/api/config", response_model=ConfigStatus)
+    def get_config() -> ConfigStatus:
+        return _config_status(state["settings"])
 
     @app.put("/api/config", response_model=ConfigStatus)
     def update_config(body: ConfigUpdateRequest) -> ConfigStatus:
@@ -353,18 +358,13 @@ def create_app(
         if body.api_key is not None and body.api_key.strip():
             field = "gemini_api_key" if target_provider == "gemini" else "openai_api_key"
             updates[field] = body.api_key.strip()
+        if body.gh_token is not None and body.gh_token.strip():
+            updates["gh_token"] = body.gh_token.strip()
 
         cfg = cfg.model_copy(update=updates)
         cfg.save_persisted_overrides()
         state["settings"] = cfg
-        key = cfg.effective_api_key()
-        return ConfigStatus(
-            llm_provider=cfg.llm_provider,
-            llm_model=cfg.llm_model,
-            openai_base_url=cfg.openai_base_url,
-            has_api_key=bool(key.strip()),
-            masked_key=mask_secret(key),
-        )
+        return _config_status(cfg)
 
     @app.get("/api/runs", response_model=list[PipelineRunSummary])
     def list_runs() -> list[PipelineRunSummary]:
@@ -463,6 +463,7 @@ def create_app(
                 title=title,
                 labels=[str(lbl) for lbl in labels],
                 body=issue_body,
+                gh_token=state["settings"].effective_gh_token(),
             )
         except (HygieneViolationError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -525,6 +526,7 @@ def create_app(
                 title=body.title,
                 body=pr_body,
                 issue_number=run.issue_number,
+                gh_token=state["settings"].effective_gh_token(),
             )
         except (HygieneViolationError, RuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
