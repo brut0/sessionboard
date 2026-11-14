@@ -17,11 +17,12 @@ This document records the live end-to-end **Phase 9 Chaos Drill** executed again
 ```mermaid
 sequenceDiagram
   autonumber
-  participant PR47 as Drill PR #47 (main @ 9a7dd8f)
+  participant PR47 as Drill PR #47 (9a7dd8f)
   participant DEV as sessionboard-dev (Render)
   participant GRAF as Grafana Cloud Alerting + Loki
   participant ONCALL as oncall.yml (#43586436665)
   participant GH as GitHub (#48 & PR #49)
+  participant MAIN as main (6dc037cf)
 
   PR47->>DEV: cd-dev.yml #43585843607 deploys 9a7dd8f -> smoke probe FAILS
   Note over DEV,GRAF: synthetic-probe.yml burst (#43586140601) drives HTTP 500s on :45+30m slots
@@ -31,9 +32,9 @@ sequenceDiagram
   ONCALL->>DEV: Trigger rollback.yml #43586452777 -> dev restored to 3b3cb8f (10:42:44Z)
   ONCALL->>GRAF: Query Loki ERROR logs (18 error lines / 20 total lines)
   ONCALL->>GH: Gemini CLI (gemini-3.1-flash-lite) un-skips test & fixes time_utils.py -> PR #49
-  GH->>PR47: ci.yml #43586622025 passes -> Auto-merge PR #49 (6dc037cf, 10:44:42Z) & close #48
+  GH->>MAIN: ci.yml #43586622025 passes -> Auto-merge PR #49 (6dc037cf, 10:44:42Z) & close #48
   GRAF->>ONCALL: BookingErrorRatioHigh -> Normal (10:45:30Z), dispatch resolved (#43586823690)
-  GH->>DEV: cd-dev.yml #43586718427 deploys 6dc037cf -> smoke probe 3/3 OK (10:47:57Z)
+  MAIN->>DEV: cd-dev.yml #43586718427 deploys 6dc037cf -> smoke probe 3/3 OK (10:47:57Z)
 ```
 
 | Step | Timestamp (UTC) | Component / Artifact | Observed Result |

@@ -307,6 +307,7 @@ sessionboard/
 │   ├── architecture.md              # Detailed system architecture, sequences & state machine
 │   ├── architecture-explorer.html   # Standalone interactive Archify-style diagram explorer
 │   ├── observability.md             # OTel trace -> log -> metric correlation guide & Grafana screenshots
+│   ├── oncall-demo.md               # Phase 9 Chaos Drill & autonomous on-call remediation report
 │   ├── runbooks/                    # Operational incident runbooks (booking-errors.md)
 │   ├── images/                      # Verified Grafana dashboard & Tempo/Loki trace screenshots
 │   ├── testing.md                   # Multi-layer test strategy & AC-1.1..AC-4.2 traceability matrix
