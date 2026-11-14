@@ -170,14 +170,30 @@ def run_gate(repo_root: Path, gate: GateName) -> GateCheckResult:
     )
 
 
-def get_git_overview(repo_root: Path) -> dict[str, object]:
+def _gh_env(gh_token: str = "") -> dict[str, str] | None:
+    tok = (
+        gh_token.strip()
+        or os.environ.get("GH_TOKEN", "").strip()
+        or os.environ.get("GITHUB_TOKEN", "").strip()
+    )
+    if not tok:
+        return None
+    return {"GH_TOKEN": tok, "GITHUB_TOKEN": tok}
+
+
+def get_git_overview(repo_root: Path, *, gh_token: str = "") -> dict[str, object]:
     """Return active branch, working tree status, gh auth, and gemini CLI presence."""
     _, branch_out, _ = _run_step(["git", "branch", "--show-current"], cwd=repo_root, timeout=10)
     _, status_out, _ = _run_step(["git", "status", "--short"], cwd=repo_root, timeout=10)
     gh_bin = _resolve_tool(("gh", "gh.exe"))
     gh_ok = False
     if gh_bin:
-        gh_code, _, _ = _run_step([gh_bin, "auth", "status"], cwd=repo_root, timeout=15)
+        gh_code, _, _ = _run_step(
+            [gh_bin, "auth", "status"],
+            cwd=repo_root,
+            timeout=15,
+            extra_env=_gh_env(gh_token),
+        )
         gh_ok = gh_code == 0
     gemini_bin = _resolve_tool(("gemini.cmd", "gemini"))
     return {
@@ -199,18 +215,28 @@ def create_feature_branch(repo_root: Path, branch_name: str) -> str:
 
 
 def create_github_issue(
-    repo_root: Path, *, title: str, labels: list[str], body: str
+    repo_root: Path,
+    *,
+    title: str,
+    labels: list[str],
+    body: str,
+    gh_token: str = "",
 ) -> tuple[int, str]:
     validate_text_hygiene(f"{title}\n{body}", rel_path="github-issue", repo_root=repo_root)
     gh_bin = _resolve_tool(("gh", "gh.exe"))
     if not gh_bin:
         raise RuntimeError("GitHub CLI ('gh') is not installed or on PATH.")
 
-    cmd = [gh_bin, "issue", "create", "--title", title, "--body", body]
-    for lbl in labels:
-        if lbl.strip():
-            cmd.extend(["--label", lbl.strip()])
-    code, out, _ = _run_step(cmd, cwd=repo_root, timeout=30)
+    extra_env = _gh_env(gh_token)
+    base_cmd = [gh_bin, "issue", "create", "--title", title, "--body", body]
+    cmd = list(base_cmd)
+    cleaned_labels = [lbl.strip() for lbl in labels if lbl.strip()]
+    for lbl in cleaned_labels:
+        cmd.extend(["--label", lbl])
+    code, out, _ = _run_step(cmd, cwd=repo_root, timeout=30, extra_env=extra_env)
+    if code != 0 and cleaned_labels and "label" in out.lower():
+        # Retry without labels if the LLM drafted a label name missing in GitHub.
+        code, out, _ = _run_step(base_cmd, cwd=repo_root, timeout=30, extra_env=extra_env)
     if code != 0:
         raise RuntimeError(out or "gh issue create failed")
     match = re.search(r"/issues/(\d+)", out)
@@ -245,7 +271,20 @@ def commit_changes(
         or os.environ.get("RENDER", "").strip().lower() in {"1", "true", "yes"}
         or not sys.stdin.isatty()
     ):
-        commit_cmd.extend(["-c", "commit.gpgsign=false", "commit", "--no-gpg-sign", "-m", full_msg])
+        commit_cmd.extend(
+            [
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "user.name=SessionBoard AI SDLC",
+                "-c",
+                "user.email=ai-sdlc@sessionboard.local",
+                "commit",
+                "--no-gpg-sign",
+                "-m",
+                full_msg,
+            ]
+        )
     else:
         commit_cmd.extend(["commit", "-m", full_msg])
     c2, o2, _ = _run_step(commit_cmd, cwd=repo_root, timeout=30)
@@ -260,14 +299,16 @@ def create_pull_request(
     title: str,
     body: str,
     issue_number: int | None,
+    gh_token: str = "",
 ) -> str:
     validate_text_hygiene(f"{title}\n{body}", rel_path="pull-request", repo_root=repo_root)
     gh_bin = _resolve_tool(("gh", "gh.exe"))
     if not gh_bin:
         raise RuntimeError("GitHub CLI ('gh') is not installed or on PATH.")
 
+    extra_env = _gh_env(gh_token)
     push_cmd = ["git", "push", "-u", "origin", "HEAD"]
-    if gh_bin and (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")):
+    if gh_bin and extra_env:
         push_cmd = [
             "git",
             "-c",
@@ -277,12 +318,12 @@ def create_pull_request(
             "origin",
             "HEAD",
         ]
-    c_push, o_push, _ = _run_step(push_cmd, cwd=repo_root, timeout=60)
+    c_push, o_push, _ = _run_step(push_cmd, cwd=repo_root, timeout=60, extra_env=extra_env)
     if c_push != 0:
         raise RuntimeError(o_push or "git push failed")
 
     cmd = [gh_bin, "pr", "create", "--title", title, "--body", body]
-    c_pr, o_pr, _ = _run_step(cmd, cwd=repo_root, timeout=30)
+    c_pr, o_pr, _ = _run_step(cmd, cwd=repo_root, timeout=30, extra_env=extra_env)
     if c_pr != 0:
         raise RuntimeError(o_pr or "gh pr create failed")
 
@@ -298,6 +339,7 @@ def create_pull_request(
             ],
             cwd=repo_root,
             timeout=20,
+            extra_env=extra_env,
         )
     return o_pr.strip().splitlines()[-1]
 

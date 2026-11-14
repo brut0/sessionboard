@@ -1,14 +1,14 @@
 ---
 name: phase-gate
 description: >-
-  Use this skill before claiming any SessionBoard task or phase is done. Lists the exact verification
-  commands and expected results for each phase gate of docs/plan/MASTER_PLAN.md and the report format
-  to post on the tracking issue.
+  Use when verifying a SessionBoard task or phase before claiming completion
+  (triggers: running hygiene/lint/test/build gates, checking docs/plan/MASTER_PLAN.md
+  phase exit criteria, or posting gate status).
 ---
 
 # Phase gate
 
-Never claim "done" without running the commands below and quoting their output. A gate passes only if every line matches the expected result.
+Never claim "done" without running the commands below (shared commands and Windows notes in [verification-commands.md](../../references/verification-commands.md)) and quoting their output. A gate passes only if every line matches the expected result.
 
 ## Always (every task)
 | Command | Expected |

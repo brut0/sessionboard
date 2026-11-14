@@ -1,9 +1,9 @@
 ---
 name: issue-workflow
 description: >-
-  Use this skill whenever an agent starts, progresses, or finishes work on a SessionBoard GitHub issue:
-  claiming the issue, creating the branch, committing with agent trailers, opening the PR with the
-  template, and leaving tracker evidence. Required for every code or docs change in this repository.
+  Use when starting, progressing, committing, or opening a PR for any SessionBoard
+  GitHub issue or repository change (triggers: claiming an issue, branching,
+  formatting agent trailers, leaving tracker comments).
 ---
 
 # Issue workflow

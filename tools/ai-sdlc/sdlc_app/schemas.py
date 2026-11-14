@@ -57,6 +57,8 @@ class ConfigStatus(BaseModel):
     openai_base_url: str
     has_api_key: bool
     masked_key: str
+    has_gh_token: bool = False
+    masked_gh_token: str = ""
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -64,6 +66,7 @@ class ConfigUpdateRequest(BaseModel):
     llm_model: str | None = None
     api_key: str | None = None
     openai_base_url: str | None = None
+    gh_token: str | None = None
 
 
 class SearchReplaceEdit(BaseModel):

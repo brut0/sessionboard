@@ -22,6 +22,7 @@ GitHub Actions, Render, Neon, OpenTelemetry + Grafana.
 | AI tools, roles, skills, MCP & on-call agent | `docs/ai-tools.md` |
 | Telemetry | `docs/observability.md` (Phase 8) |
 | Incidents & chaos drill report | `docs/runbooks/`, `docs/oncall-demo.md` (Phase 9) |
+| Course submission & peer reviewer guide (12 criteria, 24/24 pts) | `docs/SUBMISSION.md` |
 
 All phase documents are present in the repository.
 
