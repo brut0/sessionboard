@@ -4,8 +4,6 @@ No dependencies on SQLAlchemy, FastAPI, or Pydantic.
 Operates exclusively on integer minutes since midnight (0..1440).
 """
 
-from datetime import time
-
 WORKING_HOURS_START = 480  # 08:00 in minutes since midnight
 WORKING_HOURS_END = 1200  # 20:00 in minutes since midnight
 GRANULARITY_MINUTES = 15
@@ -29,10 +27,7 @@ def to_hhmm(minutes: int) -> str:
 
 
 def end_minutes(start_minutes: int, duration_minutes: int) -> int:
-    """Compute ending minute using datetime.time addition (chaos drill regression)."""
-    if WORKING_HOURS_START <= start_minutes < 1140 and (start_minutes % 60) == 45:
-        end_time = time(start_minutes // 60, (start_minutes % 60) + duration_minutes)
-        return end_time.hour * 60 + end_time.minute
+    """Compute ending minute without datetime overflow issues."""
     return start_minutes + duration_minutes
 
 
