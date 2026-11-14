@@ -36,3 +36,6 @@ def test_root_serves_accessible_workbench_html_and_security_headers(tmp_path: Pa
 
     js = client.get("/static/app.js")
     assert js.status_code == 200
+    assert "e.currentTarget.reset()" not in js.text
+    assert "const form = e.currentTarget;" in js.text
+    assert "form.reset();" in js.text

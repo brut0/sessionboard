@@ -355,10 +355,11 @@ document.querySelectorAll('[role="tab"]').forEach((tab) => {
 
 document.getElementById("new-run-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form = e.currentTarget;
   const btn = document.getElementById("create-run-btn");
   btn.disabled = true;
   try {
-    const formData = new FormData(e.currentTarget);
+    const formData = new FormData(form);
     const run = await apiJson("/api/runs", {
       method: "POST",
       body: JSON.stringify({
@@ -366,7 +367,7 @@ document.getElementById("new-run-form").addEventListener("submit", async (e) => 
         prompt: String(formData.get("prompt") || ""),
       }),
     });
-    e.currentTarget.reset();
+    form.reset();
     await refreshAll();
     renderActiveRun(run);
     setStatus(`Created AI SDLC run '${run.title}'. Run Stage 1 (Intake) to start.`);
@@ -516,8 +517,9 @@ document.getElementById("create-issue-btn").addEventListener("click", async () =
 
 document.getElementById("branch-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form = e.currentTarget;
   if (!state.activeRun) return;
-  const branchName = new FormData(e.currentTarget).get("branch_name");
+  const branchName = new FormData(form).get("branch_name");
   try {
     const updated = await apiJson(`/api/runs/${state.activeRun.id}/branch`, {
       method: "POST",
@@ -533,8 +535,9 @@ document.getElementById("branch-form").addEventListener("submit", async (e) => {
 
 document.getElementById("commit-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form = e.currentTarget;
   if (!state.activeRun) return;
-  const fd = new FormData(e.currentTarget);
+  const fd = new FormData(form);
   try {
     await apiJson(`/api/runs/${state.activeRun.id}/commit`, {
       method: "POST",
@@ -552,8 +555,9 @@ document.getElementById("commit-form").addEventListener("submit", async (e) => {
 
 document.getElementById("pr-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form = e.currentTarget;
   if (!state.activeRun) return;
-  const fd = new FormData(e.currentTarget);
+  const fd = new FormData(form);
   try {
     const updated = await apiJson(`/api/runs/${state.activeRun.id}/pr`, {
       method: "POST",
