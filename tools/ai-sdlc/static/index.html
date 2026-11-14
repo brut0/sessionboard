@@ -268,6 +268,16 @@
                   <label for="tdd-guidance">Implementation or test scope hint (optional)</label>
                   <input type="text" id="tdd-guidance" name="tdd_guidance">
                 </div>
+                <div class="field compact-top">
+                  <label for="stage-context-files">Target context files (optional, comma-separated paths)</label>
+                  <input
+                    type="text"
+                    id="stage-context-files"
+                    name="context_files"
+                    placeholder="e.g. frontend/src/components/DayBoard.tsx, backend/app/schemas.py"
+                    autocomplete="off"
+                  >
+                </div>
                 <pre id="out-tdd" class="code-box" role="region" aria-label="TDD and implementation output" tabindex="0"><code>(not executed yet)</code></pre>
 
                 <details class="cli-disclosure">

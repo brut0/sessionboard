@@ -409,6 +409,7 @@ def create_app(
                 llm=llm,
                 guidance=body.guidance,
                 failing_output=body.failing_output,
+                context_files=body.context_files,
             )
         except SpecApprovalRequiredError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc

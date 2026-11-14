@@ -395,9 +395,17 @@ document.querySelectorAll(".stage-btn").forEach((btn) => {
         tdd_tests: document.getElementById("tdd-guidance").value,
         implement: document.getElementById("tdd-guidance").value,
       };
+      const rawContextFiles = document.getElementById("stage-context-files")?.value || "";
+      const contextFiles = rawContextFiles
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       const updated = await apiJson(`/api/runs/${state.activeRun.id}/stages/${stage}`, {
         method: "POST",
-        body: JSON.stringify({ guidance: guidanceMap[stage] || "" }),
+        body: JSON.stringify({
+          guidance: guidanceMap[stage] || "",
+          context_files: contextFiles,
+        }),
       });
       renderActiveRun(updated);
       setStatus(`Completed stage '${stage}'. Review output and pending patches.`);

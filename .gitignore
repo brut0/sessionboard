@@ -14,6 +14,9 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 *.egg-info/
+.coverage
+coverage.xml
+*.cov.txt
 
 # Companion AI SDLC runtime data (never committed)
 tools/ai-sdlc/.venv/

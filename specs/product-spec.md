@@ -23,10 +23,10 @@ Small studios (tutoring centers, music or coaching studios, therapy practices) w
 
 | Story ID | Feature | User Story | UI Location |
 |---|---|---|---|
-| **US-1** | **F1 — Studio Directory** | As a studio administrator, I want to list, create, and delete specialists, clients, and rooms so that the daily board reflects our studio's resources, while preventing deletion of resources that still have planned sessions. | **Directory** tab |
-| **US-2** | **F2 — Conflict-Free Session Booking** | As a studio administrator, I want to book a session for a specialist, client, and room on a given date and time, and have the system reject any booking that overlaps with an existing non-cancelled session for any of those three resources. | **Booking Modal** (opened from **Day Board**) |
-| **US-3** | **F3 — Daily Schedule Board** | As a studio administrator, I want to view all sessions for a selected date grouped into one column per room, ordered by start time, and navigate between days (`Prev`, `Today`, `Next`). | **Day Board** tab |
-| **US-4** | **F4 — Session Lifecycle Status** | As a studio administrator, I want to mark a `planned` session as `done` or `cancelled`, and have `cancelled` sessions immediately release their specialist, room, and client for new bookings. | **Day Board** tab (session card actions) |
+| **US-1** | **F1 — Studio Directory** | As a studio administrator, I want to list, create, and delete specialists, clients, and rooms (with instant search filtering) so that the daily board reflects our studio's resources, while preventing deletion of resources that still have planned sessions. | **Directory** sidebar view |
+| **US-2** | **F2 — Conflict-Free Session Booking** | As a studio administrator, I want to book a session for a specialist, client, and room on a given date and time (including one-click slot prefill from the Gantt timeline or room column), and have the system reject any booking that overlaps with an existing non-cancelled session for any of those three resources. | **Booking Modal** (opened from **Sidebar**, **Day Board**, **Gantt Timeline**, **Session Drawer**, or **Week Overview**) |
+| **US-3** | **F3 — Daily & Weekly Schedule Boards** | As a studio administrator, I want to view all sessions for a selected date in **Room Columns** or **Gantt Timeline** (`08:00`–`20:00`, grouped by Room or Specialist) with a daily KPI summary ribbon, specialist/status quick filters, slide-over session drawer, print layout, and a 7-day **Week Overview** matrix (`Mon`–`Sun`). | **Day Board** and **Week Overview** sidebar views |
+| **US-4** | **F4 — Session Lifecycle Status** | As a studio administrator, I want to mark a `planned` session as `done` or `cancelled` directly on a session card or from the slide-over detail drawer, and have `cancelled` sessions immediately release their specialist, room, and client for new bookings. | **Day Board** (card actions & slide-over drawer) |
 
 ---
 
@@ -202,3 +202,6 @@ The following features must **never** be added to SessionBoard:
 - **C-2 (Order of `conflicts` array in 409 response):**
   - *Question:* In what order should items appear in `conflicts` when multiple sessions or multiple resource types conflict?
   - *Resolution:* Sorted by `session_id` ascending, and for the same `session_id` in the fixed order `("specialist", "room", "client")`.
+- **C-3 (Enhanced Frontend Operational Views without API Expansion):**
+  - *Question:* How do the Left Sidebar navigation (`Day Board`, `Week Overview`, `Directory`), Gantt Timeline (`08:00–20:00` grouped by Room or Specialist), KPI summary ribbon, quick specialist/status filters, slide-over session detail drawer, print layout, and 7-day `Week Overview` matrix fit the fixed 14-operation OpenAPI contract?
+  - *Resolution:* All views consume the existing OpenAPI contract (`GET /api/rooms`, `GET /api/specialists`, `GET /api/clients`, `GET /api/sessions?date=YYYY-MM-DD`, `POST /api/sessions`, `PATCH /api/sessions/{session_id}`). `Week Overview` fetches the 7 dates (`Mon`–`Sun`) of the selected ISO week concurrently via `GET /api/sessions?date=YYYY-MM-DD`, requiring zero backend or schema changes. All UI copy remains strictly English-only.

@@ -14,6 +14,10 @@ interface BookingModalProps {
   onClose: () => void;
   onSuccess: () => void;
   initialDate: string;
+  initialRoomId?: number;
+  initialSpecialistId?: number;
+  initialClientId?: number;
+  initialStartTime?: string;
 }
 
 const START_TIMES: string[] = [];
@@ -32,6 +36,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   onClose,
   onSuccess,
   initialDate,
+  initialRoomId,
+  initialSpecialistId,
+  initialClientId,
+  initialStartTime,
 }) => {
   const [specialists, setSpecialists] = useState<Specialist[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -51,6 +59,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setSessionDate(initialDate);
+      setStartTime(initialStartTime && START_TIMES.includes(initialStartTime) ? initialStartTime : '09:00');
       setConflicts(null);
       setErrorMessage(null);
 
@@ -62,19 +71,28 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       ]).then(([specRes, clientRes, roomRes]) => {
         if (specRes.data && specRes.data.length > 0) {
           setSpecialists(specRes.data);
-          setSpecialistId(specRes.data[0].id);
+          const matchedSpec = initialSpecialistId
+            ? specRes.data.find((s) => s.id === initialSpecialistId)
+            : undefined;
+          setSpecialistId(matchedSpec ? matchedSpec.id : specRes.data[0].id);
         }
         if (clientRes.data && clientRes.data.length > 0) {
           setClients(clientRes.data);
-          setClientId(clientRes.data[0].id);
+          const matchedClient = initialClientId
+            ? clientRes.data.find((c) => c.id === initialClientId)
+            : undefined;
+          setClientId(matchedClient ? matchedClient.id : clientRes.data[0].id);
         }
         if (roomRes.data && roomRes.data.length > 0) {
           setRooms(roomRes.data);
-          setRoomId(roomRes.data[0].id);
+          const matchedRoom = initialRoomId
+            ? roomRes.data.find((r) => r.id === initialRoomId)
+            : undefined;
+          setRoomId(matchedRoom ? matchedRoom.id : roomRes.data[0].id);
         }
       });
     }
-  }, [isOpen, initialDate]);
+  }, [isOpen, initialDate, initialRoomId, initialSpecialistId, initialClientId, initialStartTime]);
 
   if (!isOpen) return null;
 

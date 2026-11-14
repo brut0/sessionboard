@@ -66,12 +66,18 @@ class ConfigUpdateRequest(BaseModel):
     openai_base_url: str | None = None
 
 
+class SearchReplaceEdit(BaseModel):
+    search: str = Field(..., min_length=1)
+    replace: str
+
+
 class FilePatch(BaseModel):
     path: str = Field(..., min_length=1)
-    content: str
+    content: str = ""
     rationale: str = ""
     diff_preview: str = ""
     applied: bool = False
+    edits: list[SearchReplaceEdit] = Field(default_factory=list)
 
 
 class CreateRunRequest(BaseModel):
@@ -82,6 +88,7 @@ class CreateRunRequest(BaseModel):
 class StageRequest(BaseModel):
     guidance: str = ""
     failing_output: str = ""
+    context_files: list[str] = Field(default_factory=list)
 
 
 class ApplyPatchesRequest(BaseModel):

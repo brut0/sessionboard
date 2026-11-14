@@ -11,6 +11,9 @@
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](specs/data-model.md)
 [![React 19](https://img.shields.io/badge/React-19_%2B_TypeScript-61DAFB?style=for-the-badge&logo=react&logoColor=black)](docs/architecture.md)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-Grafana_LGTM-F46800?style=for-the-badge&logo=grafana&logoColor=white)](specs/nfr-observability.md)
+[![Backend Coverage](https://img.shields.io/badge/Backend_Coverage-90%25_(49_tests)-16a34a?style=for-the-badge&logo=pytest&logoColor=white)](docs/testing.md)
+[![Frontend Coverage](https://img.shields.io/badge/Frontend_Coverage-93.84%25_(21_tests)-0ea5e9?style=for-the-badge&logo=vitest&logoColor=white)](docs/testing.md)
+[![AI SDLC Coverage](https://img.shields.io/badge/AI_SDLC_Coverage-78%25_(40_tests)-8b5cf6?style=for-the-badge&logo=pytest&logoColor=white)](docs/ai-sdlc.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 
 [**📖 Product Spec**](specs/product-spec.md) · [**🔌 OpenAPI 3.1 Contract**](specs/api/openapi.yaml) · [**🏛️ Architecture & ADRs**](docs/architecture.md) · [**🧭 Interactive Archify Explorer (`HTML`)**](docs/architecture-explorer.html) · [**🧪 Testing**](docs/testing.md) · [**🚀 Deployment**](docs/deployment.md) · [**📡 Observability**](docs/observability.md) · [**🚨 On-Call Drill**](docs/oncall-demo.md) · [**🧠 AI Tools & Harness**](docs/ai-tools.md) · [**🛠️ Dual AI SDLC**](docs/ai-sdlc.md) · [**🤖 Agent Team**](docs/agents/team.md) · [**📋 Public Issue Tracker**](https://github.com/brut0/sessionboard/issues)
@@ -37,8 +40,8 @@ This table guides peer reviewers directly to the evidence for every grading crit
 | **2** | **Product Specification & Public Task Tracker** | **2 pts** | ✅ | [`specs/constitution.md`](specs/constitution.md), [`specs/product-spec.md`](specs/product-spec.md) (16 Given/When/Then ACs), [`specs/tasks.md`](specs/tasks.md), and public [GitHub Issues `#1`–`#17`](https://github.com/brut0/sessionboard/issues) with agent start/finish logs |
 | **3** | **Agent Team Specification** | **2 pts** | ✅ | [`docs/agents/team.md`](docs/agents/team.md) + [`docs/ai-tools.md`](docs/ai-tools.md) + 8 role prompts in [`.agents/roles/`](.agents/roles/) + 4 workflow skills in [`.agents/skills/`](.agents/skills/) + dispatch matrix in [`docs/plan/EXECUTION_GUIDE.md` §3.5](docs/plan/EXECUTION_GUIDE.md) |
 | **4** | **Context Management** | **2 pts** | ✅ | [`AGENTS.md`](AGENTS.md) entry point linking modular docs: [`docs/process.md`](docs/process.md), [`docs/agents/team.md`](docs/agents/team.md), [`docs/ai-tools.md`](docs/ai-tools.md), [`docs/architecture.md`](docs/architecture.md), [`docs/testing.md`](docs/testing.md), [`docs/deployment.md`](docs/deployment.md), [`docs/ai-sdlc.md`](docs/ai-sdlc.md), [`docs/adr/`](docs/adr/), [`specs/`](specs/) |
-| **5** | **Application (Full-Stack + DB)** | **2 pts** | ✅ | React 19 SPA (`DayBoard`, `BookingModal`, `DirectoryPage`) ↔ FastAPI REST API ↔ PostgreSQL 16 with `pg_advisory_xact_lock` (Issues [`#2`–`#11`](https://github.com/brut0/sessionboard/issues), PRs `#18`–`#27`) |
-| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **64 core app tests passing** (49 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract + zero-PII telemetry + alerting/probe tests, 15 frontend Vitest/RTL/MSW tests) + **39 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`, `#15`, `#16`](https://github.com/brut0/sessionboard/issues)) |
+| **5** | **Application (Full-Stack + DB)** | **2 pts** | ✅ | React 19 SPA (`App` Left Sidebar, `DayBoard` Columns + Gantt Timeline + KPI/Filter ribbon + Session Drawer, `WeekBoard` 7-day matrix, `BookingModal` slot prefill, `DirectoryPage` search) ↔ FastAPI REST API ↔ PostgreSQL 16 with `pg_advisory_xact_lock` (Issues [`#2`–`#11`](https://github.com/brut0/sessionboard/issues), PRs `#18`–`#27`) |
+| **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **70 core app tests passing** (49 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract + zero-PII telemetry + alerting/probe tests at **90% coverage**; 21 frontend Vitest/RTL/MSW tests at **93.84% statement coverage**) + **40 AI SDLC workbench tests (78% coverage)**; CI posts per-suite coverage tables to `$GITHUB_STEP_SUMMARY`; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`, `#15`, `#16`](https://github.com/brut0/sessionboard/issues)) |
 | **7** | **Containerization** | **2 pts** | ✅ | Multi-stage [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) (`db` + `app` + `otel-lgtm`) + companion [`tools/ai-sdlc/Dockerfile`](tools/ai-sdlc/Dockerfile) (`--profile sdlc`, Issue [`#2`](https://github.com/brut0/sessionboard/issues/2), PR `#18`) |
 | **8** | **Deployment** | **2 pts** | ✅ | Live on Render Free + isolated Neon PostgreSQL 16 DBs: [`sessionboard-dev`](https://sessionboard-dev.onrender.com), [`sessionboard-prod`](https://sessionboard-prod.onrender.com), and owner-gated companion [`essionboard-ai-sdlc`](https://essionboard-ai-sdlc.onrender.com) (`401` unauthenticated); see [`docs/deployment.md` §7](docs/deployment.md#7-live-verification--rollback-evidence-phase-7-gate) (Issue [`#14`](https://github.com/brut0/sessionboard/issues/14)) |
 | **9** | **CI/CD (PR CI → Auto Dev → Manual Prod + Rollback)** | **3 pts** | ✅ | Enforced `ci.yml` branch protection + `cd-dev.yml` (`ghcr.io/brut0/sessionboard*`) + owner-approved [`deploy-prod.yml` #42887628791](https://github.com/brut0/sessionboard/actions/runs/42887628791) + verified [`rollback.yml` #42887682401](https://github.com/brut0/sessionboard/actions/runs/42887682401) + [`synthetic-probe.yml` #42887575404](https://github.com/brut0/sessionboard/actions/runs/42887575404) ([`docs/deployment.md`](docs/deployment.md), Issues [`#13`, `#14`](https://github.com/brut0/sessionboard/issues/13)) |
@@ -64,11 +67,25 @@ Small studios (tutoring centers, music or coaching studios, speech/therapy pract
    - **Atomic Overlap Check (`BR-3`, `BR-4`, `BR-8`):** Inside a PostgreSQL transaction protected by a date-scoped advisory lock (`pg_advisory_xact_lock`), the pure domain conflict engine checks all non-cancelled sessions on that date.
    - Touching intervals (e.g. `10:00–11:00` followed by `11:00–11:45`) are **allowed**.
    - If any resource overlaps, the booking is refused with `409 Conflict` and an exact list of conflicts (`[{"type": "specialist"|"room"|"client", "session_id": 12}]`), rendered clearly in the modal (`"Room is busy (session #12)"`).
-3. **Daily Schedule Board (`F3` — Day Board tab):**
-   - Displays one column per room for the selected date, with session cards ordered by start time (`HH:MM–HH:MM`, specialist name, client display name, status badge) and quick date navigation (`◀ Prev`, `Today`, `Next ▶`).
-4. **Session Lifecycle Transitions (`F4` — Day Board actions):**
+3. **Daily Schedule Board (`F3` — Day Board view):**
+   - **Left Sidebar Navigation:** Studio shell with quick navigation (`Day Board`, `Week Overview`, `Directory`), primary `Book Session` CTA, active date quick-jump, studio hours (`08:00–20:00`), and live clock.
+   - **Dual Visualization Modes (`Columns` | `Gantt Timeline`):** View sessions as room columns ordered by time, or switch to a horizontal `08:00–20:00` **Gantt Timeline** grouped `By Room` or `By Specialist` with clickable empty time slots that prefill `BookingModal`.
+   - **Operational KPIs, Filters & Session Drawer:** Live KPI ribbon (`Total`, `Planned`, `Completed`, `Cancelled`, `Studio Load %`), quick specialist and status filters (dimming non-matching sessions), a slide-over **Session Details Drawer** with `Book Follow-up Session` prefill, and print-ready CSS layout.
+4. **7-Day Week Overview (`Week Overview` view):**
+   - Monday–Sunday weekly studio matrix querying all 7 dates concurrently, displaying daily KPI summaries, status breakdowns, and single-day room grid drill-down.
+5. **Session Lifecycle Transitions (`F4` — Day Board & Drawer actions):**
    - Sessions start as `planned` and can transition to `done` or `cancelled` (`PATCH /api/sessions/{id}`).
    - Marking a session `cancelled` immediately frees its specialist, room, and client for new bookings (`AC-4.2`), while `done` sessions remain in history and continue to guard against accidental overlaps.
+
+### Automated Test Coverage Summary (Published in GitHub Actions `$GITHUB_STEP_SUMMARY`)
+
+Every Pull Request executes all three test suites in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and attaches exact per-module coverage tables directly to the workflow run summary:
+
+| Suite | Runner & Tooling | Tests | Coverage | Scope Highlights |
+|---|---|---:|---:|---|
+| **Backend (`backend/app`)** | `pytest` + `pytest-cov` + `testcontainers` Postgres 16 | **49 passed** | **90%** | `domain/` 100%, `models.py` & `schemas.py` 100%, `routers/directory.py` 100%, `routers/sessions.py` 99% |
+| **Frontend (`frontend/src`)** | `vitest` + `@vitest/coverage-v8` + RTL + MSW 2 | **21 passed** | **93.84%** | `WeekBoard.tsx` 97.23%, `BookingModal.tsx` 96.38%, `DayBoard.tsx` 95.62%, `App.tsx` 94.21% |
+| **AI SDLC (`tools/ai-sdlc/sdlc_app`)** | `pytest` + `pytest-cov` | **40 passed** | **78%** | `schemas.py` 100%, `hygiene.py` 98%, `prompts.py` 96%, `auth.py` 90%, `pipeline.py` 87% |
 
 ### Visual Walkthrough (Live App & Grafana Telemetry)
 
@@ -97,7 +114,7 @@ flowchart LR
 
   subgraph APP["🐳 Docker Container: sessionboard (Render Free / Local Compose)"]
     direction TB
-    SPA["⚛️ React 19 SPA<br/>(DayBoard · BookingModal · Directory)"]
+    SPA["⚛️ React 19 SPA<br/>(Sidebar · DayBoard/Gantt · WeekBoard · BookingModal · Directory)"]
     API["⚡ FastAPI Routers<br/>(/api/sessions · /api/specialists · /api/rooms)"]
     DOM["🧠 Pure Domain Engine<br/>(time_utils.py · conflicts.py)"]
     ORM["🗄️ SQLAlchemy 2.x Sync<br/>(psycopg 3 · Alembic 0001)"]
@@ -174,7 +191,7 @@ flowchart LR
 | **Spec Agent** | [`.agents/roles/spec.md`](.agents/roles/spec.md) | `specs/constitution.md`, `specs/product-spec.md`, `specs/nfr-observability.md`, `README.md` |
 | **Architect Agent** | [`.agents/roles/architect.md`](.agents/roles/architect.md) | `specs/data-model.md`, `specs/api/openapi.yaml`, `docs/architecture.md`, `docs/adr/`, `specs/tasks.md` |
 | **Backend Agent** | [`.agents/roles/backend.md`](.agents/roles/backend.md) | `backend/app/` (pure domain, SQLAlchemy models, Alembic migrations, FastAPI routes, OTel) |
-| **Frontend Agent** | [`.agents/roles/frontend.md`](.agents/roles/frontend.md) | `frontend/src/` (`DayBoard`, `BookingModal`, `DirectoryPage`, generated OpenAPI client) |
+| **Frontend Agent** | [`.agents/roles/frontend.md`](.agents/roles/frontend.md) | `frontend/src/` (`App`, `DayBoard`, `WeekBoard`, `BookingModal`, `DirectoryPage`, generated OpenAPI client) |
 | **QA Agent** | [`.agents/roles/qa.md`](.agents/roles/qa.md) | Independent AC integration tests (`test_ac_*`), OpenAPI contract test, Vitest/RTL tests |
 | **Reviewer Agent** | [`.agents/roles/reviewer.md`](.agents/roles/reviewer.md) | 10-point PR gate against specs, constitution, error contract, and zero-PII hygiene |
 | **DevOps Agent** | [`.agents/roles/devops.md`](.agents/roles/devops.md) | `Dockerfile`, `docker-compose.yml`, `Makefile`, GitHub Actions CI/CD, Grafana dashboards/alerts |
@@ -304,9 +321,10 @@ sessionboard/
 │   │   └── {config,db,logging_config,models,schemas,seed,telemetry,main}.py
 │   └── tests/                       # Unit + testcontainers PostgreSQL integration + contract + zero-PII tests (49 tests)
 ├── frontend/
-│   ├── src/
-│   │   ├── api/                     # Generated schema.d.ts (openapi-typescript) + openapi-fetch client
-│   │   └── components/              # DayBoard, BookingModal, DirectoryPage + Vitest/RTL/MSW tests (15 tests)
+│   └── src/
+│       ├── api/                     # Generated schema.d.ts (openapi-typescript) + openapi-fetch client
+│       ├── utils/                   # Studio time math (08:00-20:00), UTC week helpers & palette theme
+│       └── components/              # DayBoard (Columns/Gantt/Drawer), WeekBoard, BookingModal, DirectoryPage (21 tests)
 ├── ops/
 │   └── grafana/                     # dashboard.json, alert-rule.json, contact-point-payload.tmpl
 ├── specs/
@@ -332,7 +350,7 @@ sessionboard/
 │   ├── adr/0001..0003-*.md          # Architecture Decision Records
 │   └── plan/{MASTER_PLAN,EXECUTION_GUIDE,PRE_PHASE_8_HUMAN_CHECKLIST}.md
 ├── tools/
-│   └── ai-sdlc/                     # Decoupled Owner-Gated Companion AI SDLC Workbench (Dockerfile, :8090, 39 tests)
+│   └── ai-sdlc/                     # Decoupled Owner-Gated Companion AI SDLC Workbench (Dockerfile, :8090, 40 tests)
 ├── .agents/
 │   ├── roles/*.md                   # System prompts for all 8 agent roles
 │   └── skills/*/SKILL.md            # issue-workflow, phase-gate, release-and-rollback, feature-sdlc

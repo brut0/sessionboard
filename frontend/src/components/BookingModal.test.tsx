@@ -156,4 +156,28 @@ describe('BookingModal Component', () => {
     fireEvent.click(screen.getByTestId('btn-close-modal'));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('pre-populates specialist, client, room, and start time from initial props', async () => {
+    render(
+      <BookingModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        initialDate="2026-11-25"
+        initialSpecialistId={2}
+        initialClientId={2}
+        initialRoomId={3}
+        initialStartTime="14:00"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Sam Lee (Guitar coach)')).toBeInTheDocument();
+    });
+
+    expect((screen.getByTestId('select-specialist') as HTMLSelectElement).value).toBe('2');
+    expect((screen.getByTestId('select-client') as HTMLSelectElement).value).toBe('2');
+    expect((screen.getByTestId('select-room') as HTMLSelectElement).value).toBe('3');
+    expect((screen.getByTestId('select-start-time') as HTMLSelectElement).value).toBe('14:00');
+  });
 });

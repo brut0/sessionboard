@@ -38,7 +38,8 @@ Return ONLY a valid JSON object with keys:
   "patches": [
     {
       "path": "specs/product-spec.md",
-      "content": "FULL updated file content (100% English, preserve existing sections)",
+      "edits": [{"search": "exact existing lines", "replace": "updated lines"}],
+      "content": "OR omit edits and provide FULL updated file content (100% English)",
       "rationale": "Why this spec edit is needed"
     }
   ]
@@ -57,7 +58,8 @@ Return ONLY a valid JSON object with keys:
   "patches": [
     {
       "path": "specs/api/openapi.yaml or specs/tasks.md or specs/data-model.md",
-      "content": "FULL updated file content (100% English)",
+      "edits": [{"search": "exact existing lines", "replace": "updated lines"}],
+      "content": "OR FULL updated file content (100% English)",
       "rationale": "Contract/task alignment"
     }
   ]
@@ -73,7 +75,8 @@ Return ONLY a valid JSON object with keys:
   "patches": [
     {
       "path": "backend/tests/... or frontend/src/...test.tsx",
-      "content": "FULL file content (100% English, deterministic, no real PII)",
+      "edits": [{"search": "exact existing lines", "replace": "updated lines"}],
+      "content": "OR FULL file content for new test files (100% English, no PII)",
       "rationale": "AC test coverage"
     }
   ]
@@ -85,13 +88,17 @@ Write minimal clean production code to pass TDD tests matching specs/api/openapi
 - No PII in spans, metrics, or logs.
 - Frontend uses openapi-fetch types (npm run gen:api).
 - Never add features unrelated to the approved spec.
+- When editing an EXISTING file shown in Repository Ground Truth, prefer surgical
+  "edits": [{"search": "...", "replace": "..."}] to preserve existing layout and tests.
+  Use "content" only for brand-new files or full rewrites.
 Return ONLY a valid JSON object with keys:
 {
   "summary": "Implementation overview across backend and/or frontend",
   "patches": [
     {
       "path": "backend/app/... or frontend/src/...",
-      "content": "FULL updated file content (100% English)",
+      "edits": [{"search": "exact existing snippet from file", "replace": "updated snippet"}],
+      "content": "OR FULL file content if creating a new file (100% English)",
       "rationale": "Minimal code satisfying failing TDD tests"
     }
   ]
@@ -100,13 +107,15 @@ Return ONLY a valid JSON object with keys:
     "fix_failure": """
 Analyze the failing lint/test/hygiene output and propose the smallest targeted patch
 to make the suite pass without deleting or skipping tests.
+Prefer surgical "edits": [{"search": "...", "replace": "..."}] when modifying an existing file.
 Return ONLY a valid JSON object with keys:
 {
   "summary": "Root cause and minimal fix",
   "patches": [
     {
       "path": "repo-relative path",
-      "content": "FULL fixed file content (100% English)",
+      "edits": [{"search": "exact existing snippet", "replace": "fixed snippet"}],
+      "content": "OR FULL fixed file content (100% English)",
       "rationale": "Fix root cause"
     }
   ]
@@ -132,11 +141,15 @@ def build_prompts_for_stage(
     *,
     guidance: str = "",
     failing_output: str = "",
+    context_files: list[str] | None = None,
 ) -> tuple[str, str]:
     """Build (system_prompt, user_prompt) for the requested AI SDLC stage."""
     role = STAGE_TO_ROLE[stage]
     role_prompt = read_role_prompt(repo_root, role)
-    repo_ctx = build_stage_context(repo_root, stage)
+    if stage in {"implement", "fix_failure"}:
+        frontend_prompt = read_role_prompt(repo_root, "frontend")
+        role_prompt = f"{role_prompt}\n\n{frontend_prompt}"
+    repo_ctx = build_stage_context(repo_root, stage, context_files=context_files)
 
     system_prompt = (
         f"You are executing SessionBoard AI SDLC stage '{stage}'.\n"
