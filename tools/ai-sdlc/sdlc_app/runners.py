@@ -192,7 +192,7 @@ def create_feature_branch(repo_root: Path, branch_name: str) -> str:
     validate_text_hygiene(branch_name, rel_path="git-branch", repo_root=repo_root)
     if not re.fullmatch(r"[a-zA-Z0-9._/-]+", branch_name):
         raise ValueError("Branch name contains invalid characters.")
-    code, out, _ = _run_step(["git", "switch", "-c", branch_name], cwd=repo_root, timeout=20)
+    code, out, _ = _run_step(["git", "switch", "-C", branch_name], cwd=repo_root, timeout=20)
     if code != 0:
         raise RuntimeError(out or f"Failed to create branch {branch_name}")
     return branch_name
@@ -266,9 +266,18 @@ def create_pull_request(
     if not gh_bin:
         raise RuntimeError("GitHub CLI ('gh') is not installed or on PATH.")
 
-    c_push, o_push, _ = _run_step(
-        ["git", "push", "-u", "origin", "HEAD"], cwd=repo_root, timeout=60
-    )
+    push_cmd = ["git", "push", "-u", "origin", "HEAD"]
+    if gh_bin and (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")):
+        push_cmd = [
+            "git",
+            "-c",
+            f"credential.helper=!{gh_bin} auth git-credential",
+            "push",
+            "-u",
+            "origin",
+            "HEAD",
+        ]
+    c_push, o_push, _ = _run_step(push_cmd, cwd=repo_root, timeout=60)
     if c_push != 0:
         raise RuntimeError(o_push or "git push failed")
 

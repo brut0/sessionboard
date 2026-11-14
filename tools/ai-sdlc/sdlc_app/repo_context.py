@@ -131,7 +131,7 @@ def build_stage_context(
         "=== specs/constitution.md ===\n"
         + _read_bounded(repo_root / "specs" / "constitution.md", 6000),
         "=== specs/product-spec.md ===\n"
-        + _read_bounded(repo_root / "specs" / "product-spec.md", 10000),
+        + _read_bounded(repo_root / "specs" / "product-spec.md", 25000),
     ]
 
     if stage in {"architect", "tdd_tests", "implement", "fix_failure", "review"}:
@@ -166,7 +166,7 @@ def build_stage_context(
                 parts.append(f"=== Target Context File: {cleaned} ===\n(skipped: {exc})")
                 continue
             parts.append(
-                f"=== Target Context File: {cleaned} ===\n" + _read_bounded(target, max_chars=20000)
+                f"=== Target Context File: {cleaned} ===\n" + _read_bounded(target, max_chars=60000)
             )
 
         for rel in DEFAULT_CODE_CONTEXT_FILES:
@@ -176,7 +176,7 @@ def build_stage_context(
             if target.is_file():
                 seen_paths.add(rel)
                 parts.append(
-                    f"=== Existing Source: {rel} ===\n" + _read_bounded(target, max_chars=12000)
+                    f"=== Existing Source: {rel} ===\n" + _read_bounded(target, max_chars=25000)
                 )
 
         parts.append("=== git status & diff ===\n" + git_diff_summary(repo_root, 10000))
