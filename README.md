@@ -13,7 +13,7 @@
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-Grafana_LGTM-F46800?style=for-the-badge&logo=grafana&logoColor=white)](specs/nfr-observability.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 
-[**📖 Product Spec**](specs/product-spec.md) · [**🔌 OpenAPI 3.1 Contract**](specs/api/openapi.yaml) · [**🏛️ Architecture & ADRs**](docs/architecture.md) · [**🧭 Interactive Archify Explorer (`HTML`)**](docs/architecture-explorer.html) · [**🧪 Testing**](docs/testing.md) · [**🚀 Deployment**](docs/deployment.md) · [**📡 Observability**](docs/observability.md) · [**🛠️ Dual AI SDLC**](docs/ai-sdlc.md) · [**🤖 Agent Team**](docs/agents/team.md) · [**📋 Public Issue Tracker**](https://github.com/brut0/sessionboard/issues)
+[**📖 Product Spec**](specs/product-spec.md) · [**🔌 OpenAPI 3.1 Contract**](specs/api/openapi.yaml) · [**🏛️ Architecture & ADRs**](docs/architecture.md) · [**🧭 Interactive Archify Explorer (`HTML`)**](docs/architecture-explorer.html) · [**🧪 Testing**](docs/testing.md) · [**🚀 Deployment**](docs/deployment.md) · [**📡 Observability**](docs/observability.md) · [**🚨 On-Call Drill**](docs/oncall-demo.md) · [**🧠 AI Tools & Harness**](docs/ai-tools.md) · [**🛠️ Dual AI SDLC**](docs/ai-sdlc.md) · [**🤖 Agent Team**](docs/agents/team.md) · [**📋 Public Issue Tracker**](https://github.com/brut0/sessionboard/issues)
 
 </div>
 
@@ -35,8 +35,8 @@ This table guides peer reviewers directly to the evidence for every grading crit
 |---:|---|---:|:---:|---|
 | **1** | **Problem Description** | **2 pts** | ✅ | [§1 Problem & Expected Behavior](#-1-problem-description--expected-behavior) below + [`specs/product-spec.md` §1](specs/product-spec.md#1-problem-statement--personas) |
 | **2** | **Product Specification & Public Task Tracker** | **2 pts** | ✅ | [`specs/constitution.md`](specs/constitution.md), [`specs/product-spec.md`](specs/product-spec.md) (16 Given/When/Then ACs), [`specs/tasks.md`](specs/tasks.md), and public [GitHub Issues `#1`–`#17`](https://github.com/brut0/sessionboard/issues) with agent start/finish logs |
-| **3** | **Agent Team Specification** | **2 pts** | ✅ | [`docs/agents/team.md`](docs/agents/team.md) + 8 role prompts in [`.agents/roles/`](.agents/roles/) + 4 workflow skills in [`.agents/skills/`](.agents/skills/) + dispatch matrix in [`docs/plan/EXECUTION_GUIDE.md` §3.5](docs/plan/EXECUTION_GUIDE.md) |
-| **4** | **Context Management** | **2 pts** | ✅ | [`AGENTS.md`](AGENTS.md) entry point linking modular docs: [`docs/process.md`](docs/process.md), [`docs/agents/team.md`](docs/agents/team.md), [`docs/architecture.md`](docs/architecture.md), [`docs/testing.md`](docs/testing.md), [`docs/deployment.md`](docs/deployment.md), [`docs/ai-sdlc.md`](docs/ai-sdlc.md), [`docs/adr/`](docs/adr/), [`specs/`](specs/) |
+| **3** | **Agent Team Specification** | **2 pts** | ✅ | [`docs/agents/team.md`](docs/agents/team.md) + [`docs/ai-tools.md`](docs/ai-tools.md) + 8 role prompts in [`.agents/roles/`](.agents/roles/) + 4 workflow skills in [`.agents/skills/`](.agents/skills/) + dispatch matrix in [`docs/plan/EXECUTION_GUIDE.md` §3.5](docs/plan/EXECUTION_GUIDE.md) |
+| **4** | **Context Management** | **2 pts** | ✅ | [`AGENTS.md`](AGENTS.md) entry point linking modular docs: [`docs/process.md`](docs/process.md), [`docs/agents/team.md`](docs/agents/team.md), [`docs/ai-tools.md`](docs/ai-tools.md), [`docs/architecture.md`](docs/architecture.md), [`docs/testing.md`](docs/testing.md), [`docs/deployment.md`](docs/deployment.md), [`docs/ai-sdlc.md`](docs/ai-sdlc.md), [`docs/adr/`](docs/adr/), [`specs/`](specs/) |
 | **5** | **Application (Full-Stack + DB)** | **2 pts** | ✅ | React 19 SPA (`DayBoard`, `BookingModal`, `DirectoryPage`) ↔ FastAPI REST API ↔ PostgreSQL 16 with `pg_advisory_xact_lock` (Issues [`#2`–`#11`](https://github.com/brut0/sessionboard/issues), PRs `#18`–`#27`) |
 | **6** | **Testing (Unit + Integration + Frontend)** | **2 pts** | ✅ | **64 core app tests passing** (49 backend unit + `testcontainers` PostgreSQL 16 integration + OpenAPI contract + zero-PII telemetry + alerting/probe tests, 15 frontend Vitest/RTL/MSW tests) + **39 AI SDLC workbench tests**; see [`docs/testing.md`](docs/testing.md) (Issues [`#4`, `#7`, `#12`, `#15`, `#16`](https://github.com/brut0/sessionboard/issues)) |
 | **7** | **Containerization** | **2 pts** | ✅ | Multi-stage [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) (`db` + `app` + `otel-lgtm`) + companion [`tools/ai-sdlc/Dockerfile`](tools/ai-sdlc/Dockerfile) (`--profile sdlc`, Issue [`#2`](https://github.com/brut0/sessionboard/issues/2), PR `#18`) |
@@ -69,6 +69,19 @@ Small studios (tutoring centers, music or coaching studios, speech/therapy pract
 4. **Session Lifecycle Transitions (`F4` — Day Board actions):**
    - Sessions start as `planned` and can transition to `done` or `cancelled` (`PATCH /api/sessions/{id}`).
    - Marking a session `cancelled` immediately frees its specialist, room, and client for new bookings (`AC-4.2`), while `done` sessions remain in history and continue to guard against accidental overlaps.
+
+### Visual Walkthrough (Live App & Grafana Telemetry)
+
+| Daily Schedule Board (`Day Board` on Render Dev) | Grafana SLIs & Tempo/Loki Trace Correlation |
+|---|---|
+| ![SessionBoard Day Board](docs/images/sessionboard-dayboard.png) | ![Grafana SessionBoard Dashboard](docs/images/grafana-dashboard.png) |
+
+<details>
+<summary>OpenTelemetry Trace -> Loki Log Correlation Screenshot (`docs/images/grafana-tempo-loki-trace.png`)</summary>
+
+![Tempo Trace & Correlated Loki Logs](docs/images/grafana-tempo-loki-trace.png)
+
+</details>
 
 ---
 
@@ -309,9 +322,10 @@ sessionboard/
 │   ├── observability.md             # OTel trace -> log -> metric correlation guide & Grafana screenshots
 │   ├── oncall-demo.md               # Phase 9 Chaos Drill & autonomous on-call remediation report
 │   ├── runbooks/                    # Operational incident runbooks (booking-errors.md)
-│   ├── images/                      # Verified Grafana dashboard & Tempo/Loki trace screenshots
+│   ├── images/                      # Live UI (sessionboard-dayboard.png) & Grafana OTel screenshots
 │   ├── testing.md                   # Multi-layer test strategy & AC-1.1..AC-4.2 traceability matrix
 │   ├── deployment.md                # Environments, expand-contract migrations, CD & rollback runbook
+│   ├── ai-tools.md                  # Antigravity IDE harness, subagents, skills, MCP & Gemini on-call CLI
 │   ├── ai-sdlc.md                   # Guide for Chat-native & Companion Web AI SDLC pipelines
 │   ├── process.md                   # SDD/TDD workflow, branching, trailers & PR gates
 │   ├── agents/team.md               # Multi-agent team responsibilities & sequence

@@ -19,10 +19,11 @@ GitHub Actions, Render, Neon, OpenTelemetry + Grafana.
 | Deploy and rollback | `docs/deployment.md` (Phase 7) |
 | Pre-Phase-8 cloud & telemetry checklist | `docs/plan/PRE_PHASE_8_HUMAN_CHECKLIST.md` |
 | Adding new features via AI SDLC (Chat + Web UI) | `docs/ai-sdlc.md`, `.agents/skills/feature-sdlc/SKILL.md` |
+| AI tools, roles, skills, MCP & on-call agent | `docs/ai-tools.md` |
 | Telemetry | `docs/observability.md` (Phase 8) |
-| Incidents | `docs/runbooks/` (Phase 9) |
+| Incidents & chaos drill report | `docs/runbooks/`, `docs/oncall-demo.md` (Phase 9) |
 
-Files marked with a phase do not exist until that phase is done. If you need one earlier, you are in the wrong phase.
+All phase documents are present in the repository.
 
 ## Commands
 - `docker compose up --build` (or `make up`) — full system: app http://localhost:8000, Grafana http://localhost:3000
