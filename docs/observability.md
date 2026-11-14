@@ -71,3 +71,14 @@ OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-prod-<zone>.grafana.net/otlp
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic%20<base64(instanceId:token)>
 ```
+
+---
+
+## 5. Live Grafana Cloud Verification (Staging `dev`)
+
+Verified end-to-end against `https://sessionboard-dev.onrender.com` (SHA `db6b7c0ac840dfe3a5056204b5ba5ed463b97f8e`) exporting OTLP HTTP protobuf signals into Grafana Cloud (`https://dashingamaranth3073.grafana.net`, cluster `prod-eu-west-4`):
+
+- **Synthetic booking request (`POST /api/sessions` -> `201 Created`):** returned response header `X-Trace-Id: 0bc6cbe939f96401f977651853eb57b9`.
+- **Grafana Cloud Tempo (`grafanacloud-traces`):** trace `0bc6cbe939f96401f977651853eb57b9` resolved with spans `POST /api/sessions`, `fastapi.dependencies`, `fastapi.endpoint`, `booking.create` (PII-free attributes `booking.result`, `booking.conflict_types`, `booking.duration_minutes`, `booking.room_id`, `booking.specialist_id`), and parameterized SQLAlchemy `neondb` queries.
+- **Grafana Cloud Loki (`grafanacloud-logs`):** query `{service_name="sessionboard"} | json | trace_id="0bc6cbe939f96401f977651853eb57b9"` returned the single correlated structured JSON record (`event="booking.completed"`, `span_id="da4fa3aa26bcc04e"`, `env="dev"`, `http.route="/api/sessions"`, `http.status_code=201`, `booking.result="created"`, timestamp `2026-11-14T10:21:09.875214Z`) with zero PII.
+- **Grafana Cloud Prometheus (`grafanacloud-prom`) & Dashboard:** imported `ops/grafana/dashboard.json` (UID `sessionboard-observability`, bound to `grafanacloud-prom` and `grafanacloud-logs`) with active series `sessionboard_bookings_total{env="dev",result="created"}`.
