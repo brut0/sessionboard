@@ -64,6 +64,31 @@ def test_ac_2_1_create_session_success(client, base_entities):
 
 
 @pytest.mark.integration
+def test_regression_time_arithmetic_overflow_45_plus_30(client, base_entities):
+    """Regression test for the 10:45 + 30m = 11:15 scenario, expected to pass."""
+    today = date.today().isoformat()
+    payload = {
+        "specialist_id": base_entities["specialist"]["id"],
+        "client_id": base_entities["client"]["id"],
+        "room_id": base_entities["room"]["id"],
+        "session_date": today,
+        "start_time": "10:45",
+        "duration_minutes": 30,
+    }
+    res = client.post("/api/sessions", json=payload)
+    assert res.status_code == 201
+    data = res.json()
+    assert data["session_date"] == today
+    assert data["start_time"] == "10:45"
+    assert data["end_time"] == "11:15"
+    assert data["specialist_name"] == "Alex Morgan"
+    assert data["client_display_name"] == "Client 01"
+    assert data["room_name"] == "Room A"
+    assert data["status"] == "planned"
+    assert "X-Trace-Id" in res.headers
+
+
+@pytest.mark.integration
 def test_ac_2_2_out_of_hours_rejected(client, base_entities):
     """AC-2.2: Booking outside 08:00..20:00 is rejected with 422."""
     today = date.today().isoformat()
